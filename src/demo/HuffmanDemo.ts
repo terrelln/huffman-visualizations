@@ -211,21 +211,53 @@ export class HuffmanDemo {
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
 
-    // Forward: highlight nodes about to be merged.
-    // Backward: highlight the nodes that were merged (now children in current tree).
-    const highlightIds =
-      index > prevStep ? snap.mergingIds :
-      index < prevStep ? this.snapshots[prevStep].mergingIds :
-      undefined;
+    if (index > prevStep && snap.selectionSteps) {
+      // Animate the two-step selection process, then merge.
+      for (const step of snap.selectionSteps) {
+        const { q1CandidateId, q2CandidateId, selectedId } = step;
+        const candidates = [q1CandidateId, q2CandidateId].filter((id): id is string => !!id);
+        const hasComparison = candidates.length >= 2;
 
-    if (highlightIds) {
-      this.renderer.setHighlight(highlightIds, true);
-      await delay(200);
+        if (hasComparison) {
+          this.renderer.setComparing(candidates, true);
+          // Fire comparison label concurrently with the blue-highlight phase
+          void this.renderer.showComparisonAnimation(
+            step.q1CandidateId!, step.q2CandidateId!,
+            step.q1CandidateFreq!, step.q2CandidateFreq!,
+            step.selectedId,
+          );
+          await delay(650);
+          this.renderer.setComparing(candidates, false);
+        }
+        this.renderer.setHighlight([selectedId], true);
+        await delay(250);
+      }
+
+      // Both nodes now highlighted — trigger the merge animation
       this.renderer.update(snap.tree, snap.sections);
       await delay(this.renderer.transitionDuration);
-      this.renderer.setHighlight(highlightIds, false);
+      this.renderer.setHighlight([...snap.mergingIds!], false);
+
+      // Sum label flies from children up to parent
+      if (snap.mergingFreqs && snap.mergedParentId) {
+        await this.renderer.showSumAnimation(
+          snap.mergingIds![0], snap.mergingIds![1],
+          snap.mergingFreqs[0], snap.mergingFreqs[1],
+          snap.mergedParentId,
+        );
+      }
     } else {
-      this.renderer.update(snap.tree, snap.sections);
+      // Backward: briefly highlight the nodes that were just un-merged
+      const highlightIds = index < prevStep ? this.snapshots[prevStep].mergingIds : undefined;
+      if (highlightIds) {
+        this.renderer.setHighlight(highlightIds, true);
+        await delay(200);
+        this.renderer.update(snap.tree, snap.sections);
+        await delay(this.renderer.transitionDuration);
+        this.renderer.setHighlight(highlightIds, false);
+      } else {
+        this.renderer.update(snap.tree, snap.sections);
+      }
     }
 
     this.prevBtn.disabled = this.currentStep === 0;

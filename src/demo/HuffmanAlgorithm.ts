@@ -7,13 +7,24 @@ export interface SymbolInput {
   freq: number;
 }
 
+export interface SelectionStep {
+  q1CandidateId?: string;   // front of Q1 at time of comparison (undefined if Q1 empty)
+  q1CandidateFreq?: number;
+  q2CandidateId?: string;   // front of Q2 at time of comparison (undefined if Q2 empty)
+  q2CandidateFreq?: number;
+  selectedId: string;       // the winner (lower freq; ties go to Q1)
+}
+
 export interface HuffmanSnapshot {
   tree: Tree;
   stepLabel: string;       // e.g. "Step 2 of 5"
   description: string;     // e.g. "Merge d:1 + e:1 → de:2"
   isComplete: boolean;
   sections: SectionInfo;
-  mergingIds?: [string, string]; // IDs of the two nodes merged to produce this step
+  mergingIds?: [string, string];         // IDs of the two nodes merged to produce this step
+  mergingFreqs?: [number, number];       // their frequencies (for sum animation)
+  mergedParentId?: string;               // ID of the newly created parent node
+  selectionSteps?: [SelectionStep, SelectionStep]; // two dequeue selections for this merge
 }
 
 interface QueueItem {
@@ -79,7 +90,12 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
   let mergeCount = 1;
 
   while (q1.length + q2.length > 1) {
+    const s1q1 = q1[0]?.nodeId; const s1q1f = q1[0]?.freq;
+    const s1q2 = q2[0]?.nodeId; const s1q2f = q2[0]?.freq;
     const a = dequeueMin(q1, q2);
+
+    const s2q1 = q1[0]?.nodeId; const s2q1f = q1[0]?.freq;
+    const s2q2 = q2[0]?.nodeId; const s2q2f = q2[0]?.freq;
     const b = dequeueMin(q1, q2);
 
     const left  = a;
@@ -120,6 +136,12 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
         q2Caption: 'in merge order',
       },
       mergingIds: [left.nodeId, right.nodeId],
+      mergingFreqs: [left.freq, right.freq],
+      mergedParentId: newId,
+      selectionSteps: [
+        { q1CandidateId: s1q1, q1CandidateFreq: s1q1f, q2CandidateId: s1q2, q2CandidateFreq: s1q2f, selectedId: a.nodeId },
+        { q1CandidateId: s2q1, q1CandidateFreq: s2q1f, q2CandidateId: s2q2, q2CandidateFreq: s2q2f, selectedId: b.nodeId },
+      ],
     });
   }
 

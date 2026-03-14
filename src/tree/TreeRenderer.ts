@@ -50,6 +50,145 @@ export class TreeRenderer {
     this.svgEl.appendChild(this.nodesGroup);
   }
 
+  async showComparisonAnimation(
+    q1Id: string,
+    q2Id: string,
+    q1Freq: number,
+    q2Freq: number,
+    selectedId: string,
+  ): Promise<void> {
+    const parseXY = (id: string) => {
+      const t = this.nodeGroupMap.get(id)?.style.transform;
+      if (!t) return null;
+      const m = t.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    };
+
+    const q1pos = parseXY(q1Id);
+    const q2pos = parseXY(q2Id);
+    if (!q1pos || !q2pos) return;
+
+    const op = q1Freq < q2Freq ? '<' : q1Freq > q2Freq ? '>' : '=';
+    const winnerPos = selectedId === q1Id ? q1pos : q2pos;
+
+    const startX = (q1pos.x + q2pos.x) / 2;
+    const startY = Math.min(q1pos.y, q2pos.y) - 38;
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.classList.add('comparison-label');
+    g.style.transform = `translate(${startX}px, ${startY}px)`;
+    g.style.opacity = '0';
+
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.classList.add('comparison-label-text');
+    text.textContent = `${q1Freq} ${op} ${q2Freq}`;
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    g.appendChild(text);
+    this.nodesGroup.appendChild(g);
+
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+      try {
+        const bb = (text as SVGTextElement).getBBox();
+        const pad = 6;
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.classList.add('comparison-label-bg');
+        rect.setAttribute('x', String(bb.x - pad));
+        rect.setAttribute('y', String(bb.y - pad));
+        rect.setAttribute('width',  String(bb.width  + pad * 2));
+        rect.setAttribute('height', String(bb.height + pad * 2));
+        rect.setAttribute('rx', '4');
+        g.insertBefore(rect, text);
+      } catch {}
+      resolve();
+    })));
+
+    // Fade in
+    g.style.transition = 'opacity 0.15s ease';
+    g.style.opacity = '1';
+    await new Promise<void>(resolve => setTimeout(resolve, 300));
+
+    // Fly toward winner and fade out
+    const flyDur = 320;
+    g.style.transition = `opacity ${flyDur}ms ease, transform ${flyDur}ms ease`;
+    g.style.transform = `translate(${winnerPos.x}px, ${winnerPos.y}px)`;
+    g.style.opacity = '0';
+    await new Promise<void>(resolve => setTimeout(resolve, flyDur));
+    g.remove();
+  }
+
+  async showSumAnimation(
+    leftId: string,
+    rightId: string,
+    leftFreq: number,
+    rightFreq: number,
+    parentId: string,
+  ): Promise<void> {
+    const parseXY = (id: string) => {
+      const t = this.nodeGroupMap.get(id)?.style.transform;
+      if (!t) return null;
+      const m = t.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+    };
+
+    const lp = parseXY(leftId);
+    const rp = parseXY(rightId);
+    const pp = parseXY(parentId);
+    if (!lp || !rp || !pp) return;
+
+    const startX = (lp.x + rp.x) / 2;
+    const startY = (lp.y + rp.y) / 2;
+
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.classList.add('sum-label');
+    g.style.transform = `translate(${startX}px, ${startY}px)`;
+    g.style.opacity = '0';
+
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.classList.add('sum-label-text');
+    text.textContent = `${leftFreq} + ${rightFreq} = ${leftFreq + rightFreq}`;
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('dominant-baseline', 'central');
+    g.appendChild(text);
+    this.nodesGroup.appendChild(g);
+
+    // Size background rect after text is in DOM
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+      try {
+        const bb = (text as SVGTextElement).getBBox();
+        const pad = 6;
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.classList.add('sum-label-bg');
+        rect.setAttribute('x', String(bb.x - pad));
+        rect.setAttribute('y', String(bb.y - pad));
+        rect.setAttribute('width',  String(bb.width  + pad * 2));
+        rect.setAttribute('height', String(bb.height + pad * 2));
+        rect.setAttribute('rx', '4');
+        g.insertBefore(rect, text);
+      } catch {}
+      resolve();
+    })));
+
+    // Fade in at children midpoint
+    g.style.transition = 'opacity 0.2s ease';
+    g.style.opacity = '1';
+    await new Promise<void>(resolve => setTimeout(resolve, 350));
+
+    // Fly up to parent and fade out simultaneously
+    const dur = this.transitionDuration;
+    g.style.transition = `opacity ${dur}ms ease, transform ${dur}ms ease`;
+    g.style.transform = `translate(${pp.x}px, ${pp.y}px)`;
+    g.style.opacity = '0';
+    await new Promise<void>(resolve => setTimeout(resolve, dur));
+    g.remove();
+  }
+
+  setComparing(ids: string[], on: boolean): void {
+    for (const id of ids) {
+      this.nodeGroupMap.get(id)?.classList.toggle('comparing', on);
+    }
+  }
+
   setHighlight(ids: string[], on: boolean): void {
     for (const id of ids) {
       this.nodeGroupMap.get(id)?.classList.toggle('merging', on);

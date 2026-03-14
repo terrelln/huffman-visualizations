@@ -208,6 +208,11 @@ button:disabled {
   transition: fill 0.2s ease, stroke 0.2s ease;
 }
 
+.tree-node.comparing circle {
+  fill: #cfe2ff;
+  stroke: #0d6efd;
+}
+
 .tree-node.merging circle {
   fill: #ffe066;
   stroke: #c98a00;
@@ -226,4 +231,34 @@ button:disabled {
 .tree-edge {
   stroke: #adb5bd;
   stroke-width: 1.5;
+}
+
+/* ── Comparison animation label ─────────────────────────────────────────── */
+
+.comparison-label-bg {
+  fill: #cfe2ff;
+  stroke: #0d6efd;
+  stroke-width: 1;
+}
+
+.comparison-label-text {
+  fill: #052c65;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* ── Sum animation label ─────────────────────────────────────────────────── */
+
+.sum-label-bg {
+  fill: #fff3cd;
+  stroke: #c98a00;
+  stroke-width: 1;
+}
+
+.sum-label-text {
+  fill: #7a5200;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
