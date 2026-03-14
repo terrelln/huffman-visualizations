@@ -2,8 +2,10 @@ import type { Tree } from './BinaryTree';
 
 const H_GAP = 60;
 const V_GAP = 80;
-const PADDING = 60;
-const FOREST_GAP = 60; // horizontal gap between independent subtrees
+const PADDING = 60;      // horizontal (left/right) margin
+const PADDING_TOP = 90;  // vertical top margin — must fit section title + caption + gap
+const FOREST_GAP = 60;   // horizontal gap between subtrees within the same section
+const SECTION_GAP = 120; // wider gap between Q1 and Q2 sections
 
 export interface Position {
   x: number;
@@ -78,21 +80,25 @@ export function computeLayout(tree: Tree): Layout {
   for (let i = 0; i < rootIds.length; i++) {
     const { minX, maxX } = extents[i];
     shiftSubtree(rootIds[i], cursor - minX);
-    cursor += maxX - minX + FOREST_GAP;
+    const gap = (tree.sectionBoundary != null && i === tree.sectionBoundary - 1)
+      ? SECTION_GAP
+      : FOREST_GAP;
+    cursor += maxX - minX + gap;
   }
+  // After the last subtree the loop always appended FOREST_GAP; subtract it back.
   const totalWidth = cursor - FOREST_GAP + PADDING;
 
   const positions = new Map<string, Position>();
   let maxDepth = 0;
   for (const [id, x] of xMap) {
     const depth = depthMap.get(id) ?? 0;
-    positions.set(id, { x, y: PADDING + depth * V_GAP });
+    positions.set(id, { x, y: PADDING_TOP + depth * V_GAP });
     if (depth > maxDepth) maxDepth = depth;
   }
 
   return {
     positions,
     totalWidth,
-    totalHeight: PADDING * 2 + maxDepth * V_GAP,
+    totalHeight: PADDING_TOP + PADDING + maxDepth * V_GAP,
   };
 }

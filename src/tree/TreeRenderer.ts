@@ -1,5 +1,15 @@
 import type { Tree } from './BinaryTree';
 import { computeLayout } from './TreeLayout';
+import type { Position } from './TreeLayout';
+
+export interface SectionInfo {
+  q1Ids: string[];
+  q1Title: string;
+  q1Caption: string;
+  q2Ids: string[];
+  q2Title: string;
+  q2Caption: string;
+}
 
 interface RendererOptions {
   svgEl: SVGSVGElement;
@@ -7,11 +17,16 @@ interface RendererOptions {
   transitionDuration?: number;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const LABEL_TITLE_Y  = 18;
+const LABEL_CAPTION_Y = 33;
+
 export class TreeRenderer {
   private svgEl: SVGSVGElement;
   private nodeRadius: number;
   readonly transitionDuration: number;
 
+  private sectionLabelsGroup: SVGGElement;
   private edgesGroup: SVGGElement;
   private nodesGroup: SVGGElement;
 
@@ -23,11 +38,14 @@ export class TreeRenderer {
     this.nodeRadius = nodeRadius;
     this.transitionDuration = transitionDuration;
 
-    this.edgesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    this.sectionLabelsGroup = document.createElementNS(SVG_NS, 'g');
+    this.sectionLabelsGroup.id = 'section-labels';
+    this.edgesGroup = document.createElementNS(SVG_NS, 'g');
     this.edgesGroup.id = 'edges';
-    this.nodesGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    this.nodesGroup = document.createElementNS(SVG_NS, 'g');
     this.nodesGroup.id = 'nodes';
 
+    this.svgEl.appendChild(this.sectionLabelsGroup);
     this.svgEl.appendChild(this.edgesGroup);
     this.svgEl.appendChild(this.nodesGroup);
   }
@@ -38,7 +56,7 @@ export class TreeRenderer {
     }
   }
 
-  update(tree: Tree): void {
+  update(tree: Tree, sections?: SectionInfo): void {
     const layout = computeLayout(tree);
     const { positions, totalWidth, totalHeight } = layout;
 
@@ -69,7 +87,6 @@ export class TreeRenderer {
         const pos = positions.get(id)!;
         el.style.transition = `opacity ${this.transitionDuration}ms, transform ${this.transitionDuration}ms`;
         el.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-        // Update label
         const textEl = el.querySelector('text');
         const node = tree.nodes.get(id)!;
         if (textEl) textEl.textContent = node.label;
@@ -83,14 +100,12 @@ export class TreeRenderer {
         const node = tree.nodes.get(id)!;
         const g = this.createNodeGroup(id, node.label, pos.x, pos.y);
 
-        // Start invisible + scaled down
         g.style.transition = 'none';
         g.style.opacity = '0';
         g.style.transform = `translate(${pos.x}px, ${pos.y}px) scale(0)`;
         this.nodesGroup.appendChild(g);
         this.nodeGroupMap.set(id, g);
 
-        // Double-rAF to ensure browser paints initial state before animating
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             g.style.transition = `opacity ${this.transitionDuration}ms, transform ${this.transitionDuration}ms`;
@@ -103,18 +118,86 @@ export class TreeRenderer {
 
     // 4. Update edges
     this.updateEdges(tree, positions);
+
+    // 5. Update section labels
+    this.updateSectionLabels(sections, positions, tree, totalHeight);
+  }
+
+  private updateSectionLabels(
+    sections: SectionInfo | undefined,
+    positions: Map<string, Position>,
+    tree: Tree,
+    totalHeight: number,
+  ): void {
+    // Clear previous labels
+    while (this.sectionLabelsGroup.firstChild) {
+      this.sectionLabelsGroup.firstChild.remove();
+    }
+    if (!sections) return;
+
+    const { q1Ids, q1Title, q1Caption, q2Ids, q2Title, q2Caption } = sections;
+
+    const xExtent = (rootIds: string[]): { minX: number; maxX: number } | null => {
+      let minX = Infinity, maxX = -Infinity;
+      const visit = (id: string) => {
+        const pos = positions.get(id);
+        if (pos) { minX = Math.min(minX, pos.x); maxX = Math.max(maxX, pos.x); }
+        const node = tree.nodes.get(id);
+        if (node?.leftId)  visit(node.leftId);
+        if (node?.rightId) visit(node.rightId);
+      };
+      for (const id of rootIds) visit(id);
+      return minX === Infinity ? null : { minX, maxX };
+    };
+
+    const q1Ext = q1Ids.length > 0 ? xExtent(q1Ids) : null;
+    const q2Ext = q2Ids.length > 0 ? xExtent(q2Ids) : null;
+
+    const addText = (x: number, y: number, text: string, cls: string) => {
+      const el = document.createElementNS(SVG_NS, 'text');
+      el.setAttribute('x', String(x));
+      el.setAttribute('y', String(y));
+      el.setAttribute('dy', '0.35em');
+      el.classList.add(cls);
+      el.textContent = text;
+      this.sectionLabelsGroup.appendChild(el);
+    };
+
+    if (q1Ext) {
+      const cx = (q1Ext.minX + q1Ext.maxX) / 2;
+      addText(cx, LABEL_TITLE_Y,   q1Title,   'section-title');
+      addText(cx, LABEL_CAPTION_Y, q1Caption, 'section-caption');
+    }
+
+    if (q2Ext) {
+      const cx = (q2Ext.minX + q2Ext.maxX) / 2;
+      addText(cx, LABEL_TITLE_Y,   q2Title,   'section-title');
+      addText(cx, LABEL_CAPTION_Y, q2Caption, 'section-caption');
+    }
+
+    // Vertical separator between sections
+    if (q1Ext && q2Ext) {
+      const sepX = (q1Ext.maxX + q2Ext.minX) / 2;
+      const line = document.createElementNS(SVG_NS, 'line');
+      line.setAttribute('x1', String(sepX));
+      line.setAttribute('y1', '0');
+      line.setAttribute('x2', String(sepX));
+      line.setAttribute('y2', String(totalHeight));
+      line.classList.add('section-separator');
+      this.sectionLabelsGroup.appendChild(line);
+    }
   }
 
   private createNodeGroup(id: string, label: string, x: number, y: number): SVGGElement {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    const g = document.createElementNS(SVG_NS, 'g');
     g.classList.add('tree-node');
     g.dataset.id = id;
     g.style.transform = `translate(${x}px, ${y}px)`;
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const circle = document.createElementNS(SVG_NS, 'circle');
     circle.setAttribute('r', String(this.nodeRadius));
 
-    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    const text = document.createElementNS(SVG_NS, 'text');
     text.setAttribute('dy', '0.35em');
     text.textContent = label;
 
@@ -136,15 +219,13 @@ export class TreeRenderer {
         const childPos = positions.get(childId)!;
 
         if (this.edgeMap.has(key)) {
-          // Update existing
           const line = this.edgeMap.get(key)!;
           line.setAttribute('x1', String(parentPos.x));
           line.setAttribute('y1', String(parentPos.y));
           line.setAttribute('x2', String(childPos.x));
           line.setAttribute('y2', String(childPos.y));
         } else {
-          // Add new
-          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          const line = document.createElementNS(SVG_NS, 'line');
           line.setAttribute('x1', String(parentPos.x));
           line.setAttribute('y1', String(parentPos.y));
           line.setAttribute('x2', String(childPos.x));
@@ -156,7 +237,6 @@ export class TreeRenderer {
       }
     }
 
-    // Remove stale edges
     for (const key of this.edgeMap.keys()) {
       if (!newEdgeKeys.has(key)) {
         this.edgeMap.get(key)!.remove();

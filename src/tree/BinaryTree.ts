@@ -8,6 +8,7 @@ export interface TreeNode {
 export interface Tree {
   nodes: Map<string, TreeNode>;
   rootIds: string[]; // one entry per independent subtree (forest support)
+  sectionBoundary?: number; // index of first Q2 root in rootIds (triggers wider gap)
 }
 
 export function makeTree(rootIds: string | string[] | null, nodes: TreeNode[]): Tree {

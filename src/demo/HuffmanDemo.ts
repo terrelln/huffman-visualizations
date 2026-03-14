@@ -221,11 +221,11 @@ export class HuffmanDemo {
     if (highlightIds) {
       this.renderer.setHighlight(highlightIds, true);
       await delay(200);
-      this.renderer.update(snap.tree);
+      this.renderer.update(snap.tree, snap.sections);
       await delay(this.renderer.transitionDuration);
       this.renderer.setHighlight(highlightIds, false);
     } else {
-      this.renderer.update(snap.tree);
+      this.renderer.update(snap.tree, snap.sections);
     }
 
     this.prevBtn.disabled = this.currentStep === 0;

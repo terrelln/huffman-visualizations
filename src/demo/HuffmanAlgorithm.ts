@@ -1,5 +1,6 @@
 import { makeTree } from '../tree/BinaryTree';
 import type { Tree, TreeNode } from '../tree/BinaryTree';
+import type { SectionInfo } from '../tree/TreeRenderer';
 
 export interface SymbolInput {
   symbol: string;
@@ -11,6 +12,7 @@ export interface HuffmanSnapshot {
   stepLabel: string;       // e.g. "Step 2 of 5"
   description: string;     // e.g. "Merge d:1 + e:1 → de:2"
   isComplete: boolean;
+  sections: SectionInfo;
   mergingIds?: [string, string]; // IDs of the two nodes merged to produce this step
 }
 
@@ -38,7 +40,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
   let q2: QueueItem[] = [];
 
   const totalMerges = inputs.length - 1;
-  const totalSteps = totalMerges + 1; // +1 for the sort step
+  const totalSteps  = totalMerges + 1; // +1 for the sort step
   const snapshots: HuffmanSnapshot[] = [];
   let internalCounter = 0;
 
@@ -48,15 +50,30 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
     stepLabel: `Step 0 of ${totalSteps}`,
     description: inputs.map(i => `${i.symbol}:${i.freq}`).join(', '),
     isComplete: false,
+    sections: {
+      q1Ids: inputs.map(i => i.symbol),
+      q1Title: 'Leaf queue',
+      q1Caption: 'as entered',
+      q2Ids: [],
+      q2Title: '',
+      q2Caption: '',
+    },
   });
 
   // Step 1: symbols sorted by frequency (nodes slide to their sorted positions)
   snapshots.push({
-    tree: forestTree([...q1], allNodes),
+    tree: forestTree(q1, q2, allNodes),
     stepLabel: `Step 1 of ${totalSteps}`,
     description: `Sort by frequency: ${sorted.map(i => `${i.symbol}:${i.freq}`).join(', ')}`,
     isComplete: false,
-    // No mergingIds — this is a reorder, not a merge
+    sections: {
+      q1Ids: q1.map(i => i.nodeId),
+      q1Title: 'Leaf queue',
+      q1Caption: 'sorted by frequency',
+      q2Ids: [],
+      q2Title: '',
+      q2Caption: '',
+    },
   });
 
   let mergeCount = 1;
@@ -88,11 +105,20 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
       `Merge ${leftLeaves}:${left.freq} + ${rightLeaves}:${right.freq}` +
       ` → ${leftLeaves}${rightLeaves}:${newFreq}`;
 
+    const isComplete = q1.length + q2.length === 1;
     snapshots.push({
-      tree: forestTree([...q1, ...q2], allNodes),
+      tree: forestTree(q1, q2, allNodes),
       stepLabel: `Step ${mergeCount} of ${totalSteps}`,
       description: desc,
-      isComplete: q1.length + q2.length === 1,
+      isComplete,
+      sections: {
+        q1Ids: q1.map(i => i.nodeId),
+        q1Title: 'Leaf queue',
+        q1Caption: 'sorted by frequency',
+        q2Ids: q2.map(i => i.nodeId),
+        q2Title: 'Tree queue',
+        q2Caption: 'in merge order',
+      },
       mergingIds: [left.nodeId, right.nodeId],
     });
   }
@@ -101,7 +127,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
 }
 
 // Return and remove the front item with the lower frequency from q1 or q2.
-// Ties go to q1 (prefer unmerged leaves to keep the tree balanced).
+// Ties go to q1 (prefer unmerged leaves).
 function dequeueMin(q1: QueueItem[], q2: QueueItem[]): QueueItem {
   const useQ1 =
     q1.length > 0 && (q2.length === 0 || q1[0].freq <= q2[0].freq);
@@ -116,7 +142,8 @@ function subtreeLeaves(nodeId: string, allNodes: Map<string, TreeNode>): string 
   return l + r;
 }
 
-function forestTree(queue: QueueItem[], allNodes: Map<string, TreeNode>): Tree {
+function forestTree(q1: QueueItem[], q2: QueueItem[], allNodes: Map<string, TreeNode>): Tree {
+  const all = [...q1, ...q2];
   const reachable = new Set<string>();
 
   function collect(nodeId: string): void {
@@ -127,10 +154,14 @@ function forestTree(queue: QueueItem[], allNodes: Map<string, TreeNode>): Tree {
     if (node?.rightId) collect(node.rightId);
   }
 
-  for (const item of queue) collect(item.nodeId);
+  for (const item of all) collect(item.nodeId);
 
   const nodes: TreeNode[] = [];
   for (const id of reachable) nodes.push(allNodes.get(id)!);
 
-  return makeTree(queue.map(item => item.nodeId), nodes);
+  const tree = makeTree(all.map(i => i.nodeId), nodes);
+  if (q1.length > 0 && q2.length > 0) {
+    tree.sectionBoundary = q1.length;
+  }
+  return tree;
 }
