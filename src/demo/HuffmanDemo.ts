@@ -144,9 +144,17 @@ export class HuffmanDemo {
 
   private updatePseudoHighlight(ids: string[]): void {
     const active = new Set(ids);
-    for (const div of this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line')) {
+    const lines = Array.from(this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line'));
+    for (const div of lines) {
       const id = div.dataset.id ?? '';
       div.classList.toggle('active', id !== '' && active.has(id));
+      div.classList.remove('active-first', 'active-last');
+    }
+    // Mark first/last of each contiguous active group for bar-shaped rounding
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i].classList.contains('active')) continue;
+      if (!lines[i - 1]?.classList.contains('active')) lines[i].classList.add('active-first');
+      if (!lines[i + 1]?.classList.contains('active')) lines[i].classList.add('active-last');
     }
   }
 
@@ -164,7 +172,7 @@ export class HuffmanDemo {
 
   private updateNavButtons(): void {
     const snap = this.snapshots[this.currentStep];
-    const allDone = snap.isComplete && this.remainingPhases.length === 0;
+    const allDone = snap.isComplete && this.remainingPhases.length === 0 && !this.isAnimating;
     this.prevBtn.disabled = this.currentStep === 0 && this.completedPhases.length === 0;
     this.nextBtn.disabled = allDone;
     this.nextBtn.textContent = allDone ? 'Done ✓' : 'Next →';
@@ -181,7 +189,7 @@ export class HuffmanDemo {
 
   private togglePlay(): void {
     const snap = this.snapshots[this.currentStep];
-    const allDone = snap.isComplete && this.remainingPhases.length === 0;
+    const allDone = snap.isComplete && this.remainingPhases.length === 0 && !this.isAnimating;
     if (allDone) {
       this.isPlaying = true;
       this.updateNavButtons();
@@ -195,7 +203,6 @@ export class HuffmanDemo {
 
   private async playLoop(): Promise<void> {
     while (this.isPlaying) {
-      if (this.isAnimating) break; // current phase still running; loop resumes after
       const snap = this.snapshots[this.currentStep];
       if (snap.isComplete && this.remainingPhases.length === 0) {
         this.isPlaying = false;
