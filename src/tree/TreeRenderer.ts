@@ -33,7 +33,7 @@ export class TreeRenderer {
   private nodeGroupMap = new Map<string, SVGGElement>();
   private edgeMap = new Map<string, SVGLineElement>();
 
-  constructor({ svgEl, nodeRadius = 22, transitionDuration = 500 }: RendererOptions) {
+  constructor({ svgEl, nodeRadius = 22, transitionDuration = 800 }: RendererOptions) {
     this.svgEl = svgEl;
     this.nodeRadius = nodeRadius;
     this.transitionDuration = transitionDuration;
@@ -104,12 +104,12 @@ export class TreeRenderer {
     })));
 
     // Fade in
-    g.style.transition = 'opacity 0.15s ease';
+    g.style.transition = 'opacity 0.2s ease';
     g.style.opacity = '1';
-    await new Promise<void>(resolve => setTimeout(resolve, 300));
+    await new Promise<void>(resolve => setTimeout(resolve, 550));
 
     // Fly toward winner and fade out
-    const flyDur = 320;
+    const flyDur = 500;
     g.style.transition = `opacity ${flyDur}ms ease, transform ${flyDur}ms ease`;
     g.style.transform = `translate(${winnerPos.x}px, ${winnerPos.y}px)`;
     g.style.opacity = '0';
@@ -172,7 +172,7 @@ export class TreeRenderer {
     // Fade in at children midpoint
     g.style.transition = 'opacity 0.2s ease';
     g.style.opacity = '1';
-    await new Promise<void>(resolve => setTimeout(resolve, 350));
+    await new Promise<void>(resolve => setTimeout(resolve, 600));
 
     // Fly up to parent and fade out simultaneously
     const dur = this.transitionDuration;
@@ -181,6 +181,12 @@ export class TreeRenderer {
     g.style.opacity = '0';
     await new Promise<void>(resolve => setTimeout(resolve, dur));
     g.remove();
+  }
+
+  clearHighlights(): void {
+    for (const el of this.nodeGroupMap.values()) {
+      el.classList.remove('merging', 'comparing');
+    }
   }
 
   setComparing(ids: string[], on: boolean): void {
