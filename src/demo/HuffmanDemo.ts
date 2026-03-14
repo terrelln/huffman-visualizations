@@ -29,25 +29,25 @@ const C = (s: string) => `<span class="pc">${s}</span>`;
 
 const PSEUDO_LINES: PseudoLine[] = [
   { id: 'fn-huf', indent: 0, html: `${K('def')} ${F('huffman')}(symbols):` },
-  { id: 'q1-init', indent: 1, html: `Q₁ = ${F('sort')}(symbols, key = ${O('λ')} s: s.freq)` },
-  { id: 'q2-init', indent: 1, html: `Q₂ = []` },
-  { id: 'while', indent: 1, html: `${K('while')} ${O('|')}Q₁${O('|')} + ${O('|')}Q₂${O('|')} > 1:` },
-  { id: 'deq-a', indent: 2, html: `a = ${F('dequeue_min')}(Q₁, Q₂)` },
-  { id: 'deq-b', indent: 2, html: `b = ${F('dequeue_min')}(Q₁, Q₂)` },
+  { id: 'q1-init', indent: 1, html: `Q<sub>L</sub> = ${F('sort')}(symbols, key = ${O('λ')} s: s.freq)` },
+  { id: 'q2-init', indent: 1, html: `Q<sub>T</sub> = []` },
+  { id: 'while', indent: 1, html: `${K('while')} ${O('|')}Q<sub>L</sub>${O('|')} + ${O('|')}Q<sub>T</sub>${O('|')} > 1:` },
+  { id: 'deq-a', indent: 2, html: `a = ${F('dequeue_min')}(Q<sub>L</sub>, Q<sub>T</sub>)` },
+  { id: 'deq-b', indent: 2, html: `b = ${F('dequeue_min')}(Q<sub>L</sub>, Q<sub>T</sub>)` },
   { id: 'node-new', indent: 2, html: `node = ${F('Node')}(` },
   { id: 'node-freq', indent: 3, html: `freq  = a.freq + b.freq,` },
   { id: 'node-lr', indent: 3, html: `left  = a,  right = b` },
   { id: 'node-lr', indent: 2, html: `)` },
-  { id: 'q2-app', indent: 2, html: `Q₂.${F('append')}(node)` },
-  { id: 'return', indent: 1, html: `${K('return')} Q₁[0] ${K('if')} ${O('|')}Q₂${O('|')}=0 ${K('else')} Q₂[0]` },
+  { id: 'q2-app', indent: 2, html: `Q<sub>T</sub>.${F('append')}(node)` },
+  { id: 'return', indent: 1, html: `${K('return')} Q<sub>L</sub>[0] ${K('if')} ${O('|')}Q<sub>T</sub>${O('|')}=0 ${K('else')} Q<sub>T</sub>[0]` },
   { id: '', indent: 0, html: '' },
-  { id: 'fn-deq', indent: 0, html: `${K('def')} ${F('dequeue_min')}(Q₁, Q₂):` },
-  { id: 'deq-q1e', indent: 1, html: `${K('if')} ${O('|')}Q₁${O('|')} = 0: ${K('return')} Q₂.${F('pop_front')}()` },
-  { id: 'deq-q2e', indent: 1, html: `${K('if')} ${O('|')}Q₂${O('|')} = 0: ${K('return')} Q₁.${F('pop_front')}()` },
-  { id: 'deq-cmp', indent: 1, html: `${K('if')} Q₁[0].freq ${O('≤')} Q₂[0].freq:` },
-  { id: 'deq-r-q1', indent: 2, html: `${K('return')} Q₁.${F('pop_front')}()  ${C('▷ ties → Q₁')}` },
+  { id: 'fn-deq', indent: 0, html: `${K('def')} ${F('dequeue_min')}(Q<sub>L</sub>, Q<sub>T</sub>):` },
+  { id: 'deq-q1e', indent: 1, html: `${K('if')} ${O('|')}Q<sub>L</sub>${O('|')} = 0: ${K('return')} Q<sub>T</sub>.${F('pop_front')}()` },
+  { id: 'deq-q2e', indent: 1, html: `${K('if')} ${O('|')}Q<sub>T</sub>${O('|')} = 0: ${K('return')} Q<sub>L</sub>.${F('pop_front')}()` },
+  { id: 'deq-cmp', indent: 1, html: `${K('if')} Q<sub>L</sub>[0].freq ${O('≤')} Q<sub>T</sub>[0].freq:` },
+  { id: 'deq-r-q1', indent: 2, html: `${K('return')} Q<sub>L</sub>.${F('pop_front')}()  ${C('▷ ties → Q<sub>L</sub>')}` },
   { id: 'deq-else', indent: 1, html: `${K('else')}:` },
-  { id: 'deq-r-q2', indent: 2, html: `${K('return')} Q₂.${F('pop_front')}()` },
+  { id: 'deq-r-q2', indent: 2, html: `${K('return')} Q<sub>T</sub>.${F('pop_front')}()` },
 ];
 
 function deqCompareLines(step: SelectionStep): string[] {
@@ -120,8 +120,6 @@ export class HuffmanDemo {
     });
   }
 
-  private stepLabel!: HTMLElement;
-  private stepDesc!: HTMLElement;
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
@@ -249,8 +247,8 @@ export class HuffmanDemo {
     }
     if (this.completedPhases.length > 0) {
       const phase = this.completedPhases.pop()!;
-      await this.runPhase(phase.backward);
       this.remainingPhases.unshift(phase);
+      await this.runPhase(phase.backward);
     } else {
       await this.goToCompletedStep(this.currentStep - 1);
     }
@@ -261,8 +259,6 @@ export class HuffmanDemo {
     this.currentStep = Math.max(0, Math.min(index, this.snapshots.length - 1));
     const snap = this.snapshots[this.currentStep];
 
-    this.stepLabel.textContent = snap.stepLabel;
-    this.stepDesc.textContent = snap.description;
 
     if (forward && snap.selectionSteps) {
       // Merge step: build bidirectional phase queue, run first phase
@@ -291,8 +287,6 @@ export class HuffmanDemo {
     this.currentStep = index;
     const snap = this.snapshots[this.currentStep];
 
-    this.stepLabel.textContent = snap.stepLabel;
-    this.stepDesc.textContent = snap.description;
     this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
 
     // Reconstruct all phases as "completed" so Prev can undo them in reverse
@@ -375,10 +369,7 @@ export class HuffmanDemo {
     }
 
     // ── Phase: node creation + merge animation + sum label ─────────────────
-    const mergeLines = [
-      'node-new', 'node-freq', 'node-lr', 'q2-app',
-      ...(snap.isComplete ? ['return'] : []),
-    ];
+    const mergeLines = ['node-new', 'node-freq', 'node-lr', 'q2-app'];
     const mergeBefore = pseudoState;
     const mergingIds = [...snap.mergingIds!] as [string, string];
     phases.push({
@@ -403,6 +394,20 @@ export class HuffmanDemo {
         this.renderer.setHighlight(mergingIds, true);
       },
     });
+
+    if (snap.isComplete) {
+      // ── Phase: while condition exits (loop terminates) ──────────────────
+      phases.push({
+        forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
+        backward: async () => { this.updatePseudoHighlight(mergeLines); },
+      });
+
+      // ── Phase: return ───────────────────────────────────────────────────
+      phases.push({
+        forward: async () => { this.updatePseudoHighlight(['return']); await this.scaledDelay(BASE_STEP_MS); },
+        backward: async () => { this.updatePseudoHighlight(['while']); },
+      });
+    }
 
     return phases;
   }
@@ -535,18 +540,6 @@ export class HuffmanDemo {
     const phase = document.createElement('div');
     phase.className = 'phase-viz';
 
-    const header = document.createElement('div');
-    header.className = 'viz-header';
-
-    this.stepLabel = document.createElement('span');
-    this.stepLabel.className = 'step-label';
-
-    this.stepDesc = document.createElement('p');
-    this.stepDesc.className = 'step-desc';
-
-    header.appendChild(this.stepLabel);
-    header.appendChild(this.stepDesc);
-
     const controls = document.createElement('div');
     controls.className = 'viz-controls';
 
@@ -596,7 +589,6 @@ export class HuffmanDemo {
     speedRow.appendChild(speedLabel);
     speedRow.appendChild(slider);
 
-    phase.appendChild(header);
     phase.appendChild(controls);
     phase.appendChild(speedRow);
     this.container.appendChild(phase);

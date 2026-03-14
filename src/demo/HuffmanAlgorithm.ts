@@ -51,7 +51,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
   let q2: QueueItem[] = [];
 
   const totalMerges = inputs.length - 1;
-  const totalSteps  = totalMerges + 1; // +1 for the sort step
+  const totalSteps = totalMerges + 1; // +1 for the sort step
   const snapshots: HuffmanSnapshot[] = [];
   let internalCounter = 0;
 
@@ -63,7 +63,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
     isComplete: false,
     sections: {
       q1Ids: inputs.map(i => i.symbol),
-      q1Title: 'Leaf queue',
+      q1Title: 'Q_L:  Leaf queue',
       q1Caption: 'as entered',
       q2Ids: [],
       q2Title: '',
@@ -79,7 +79,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
     isComplete: false,
     sections: {
       q1Ids: q1.map(i => i.nodeId),
-      q1Title: 'Leaf queue',
+      q1Title: 'Q_L:  Leaf queue',
       q1Caption: 'sorted by frequency',
       q2Ids: [],
       q2Title: '',
@@ -98,7 +98,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
     const s2q2 = q2[0]?.nodeId; const s2q2f = q2[0]?.freq;
     const b = dequeueMin(q1, q2);
 
-    const left  = a;
+    const left = a;
     const right = b;
 
     const newFreq = left.freq + right.freq;
@@ -115,7 +115,7 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
     q2.push(merged);
     mergeCount++;
 
-    const leftLeaves  = subtreeLeaves(left.nodeId,  allNodes);
+    const leftLeaves = subtreeLeaves(left.nodeId, allNodes);
     const rightLeaves = subtreeLeaves(right.nodeId, allNodes);
     const desc =
       `Merge ${leftLeaves}:${left.freq} + ${rightLeaves}:${right.freq}` +
@@ -129,10 +129,10 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
       isComplete,
       sections: {
         q1Ids: q1.map(i => i.nodeId),
-        q1Title: 'Leaf queue',
+        q1Title: 'Q_L: Leaf queue',
         q1Caption: 'sorted by frequency',
         q2Ids: q2.map(i => i.nodeId),
-        q2Title: 'Tree queue',
+        q2Title: 'Q_T:  Tree queue',
         q2Caption: 'in merge order',
       },
       mergingIds: [left.nodeId, right.nodeId],
@@ -159,7 +159,7 @@ function dequeueMin(q1: QueueItem[], q2: QueueItem[]): QueueItem {
 function subtreeLeaves(nodeId: string, allNodes: Map<string, TreeNode>): string {
   const node = allNodes.get(nodeId)!;
   if (!node.leftId && !node.rightId) return node.id;
-  const l = node.leftId  ? subtreeLeaves(node.leftId,  allNodes) : '';
+  const l = node.leftId ? subtreeLeaves(node.leftId, allNodes) : '';
   const r = node.rightId ? subtreeLeaves(node.rightId, allNodes) : '';
   return l + r;
 }
@@ -172,7 +172,7 @@ function forestTree(q1: QueueItem[], q2: QueueItem[], allNodes: Map<string, Tree
     if (reachable.has(nodeId)) return;
     reachable.add(nodeId);
     const node = allNodes.get(nodeId);
-    if (node?.leftId)  collect(node.leftId);
+    if (node?.leftId) collect(node.leftId);
     if (node?.rightId) collect(node.rightId);
   }
 
