@@ -178,6 +178,28 @@ button:disabled {
   align-items: center;
 }
 
+.viz-speed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.speed-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  min-width: 44px;
+}
+
+.speed-slider {
+  width: 120px;
+  cursor: pointer;
+  accent-color: #212529;
+}
+
 /* ── Section labels ─────────────────────────────────────────────────────── */
 
 .section-title {

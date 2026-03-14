@@ -15,6 +15,7 @@ interface RendererOptions {
   svgEl: SVGSVGElement;
   nodeRadius?: number;
   transitionDuration?: number;
+  getSpeedMultiplier?: () => number;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -24,7 +25,12 @@ const LABEL_CAPTION_Y = 33;
 export class TreeRenderer {
   private svgEl: SVGSVGElement;
   private nodeRadius: number;
-  readonly transitionDuration: number;
+  private readonly baseTransitionDuration: number;
+  private readonly getSpeedMultiplier: () => number;
+
+  get transitionDuration(): number {
+    return Math.round(this.baseTransitionDuration / this.getSpeedMultiplier());
+  }
 
   private sectionLabelsGroup: SVGGElement;
   private edgesGroup: SVGGElement;
@@ -33,10 +39,11 @@ export class TreeRenderer {
   private nodeGroupMap = new Map<string, SVGGElement>();
   private edgeMap = new Map<string, SVGLineElement>();
 
-  constructor({ svgEl, nodeRadius = 22, transitionDuration = 800 }: RendererOptions) {
+  constructor({ svgEl, nodeRadius = 22, transitionDuration = 800, getSpeedMultiplier = () => 1 }: RendererOptions) {
     this.svgEl = svgEl;
     this.nodeRadius = nodeRadius;
-    this.transitionDuration = transitionDuration;
+    this.baseTransitionDuration = transitionDuration;
+    this.getSpeedMultiplier = getSpeedMultiplier;
 
     this.sectionLabelsGroup = document.createElementNS(SVG_NS, 'g');
     this.sectionLabelsGroup.id = 'section-labels';
@@ -48,6 +55,20 @@ export class TreeRenderer {
     this.svgEl.appendChild(this.sectionLabelsGroup);
     this.svgEl.appendChild(this.edgesGroup);
     this.svgEl.appendChild(this.nodesGroup);
+  }
+
+  private scaledDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      const start = performance.now();
+      const tick = () => {
+        if (performance.now() - start >= baseMs / this.getSpeedMultiplier()) {
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
   }
 
   async showComparisonAnimation(
@@ -106,14 +127,14 @@ export class TreeRenderer {
     // Fade in
     g.style.transition = 'opacity 0.2s ease';
     g.style.opacity = '1';
-    await new Promise<void>(resolve => setTimeout(resolve, 550));
+    await this.scaledDelay(this.baseTransitionDuration);
 
     // Fly toward winner and fade out
-    const flyDur = 500;
+    const flyDur = this.transitionDuration * 0.8;
     g.style.transition = `opacity ${flyDur}ms ease, transform ${flyDur}ms ease`;
     g.style.transform = `translate(${winnerPos.x}px, ${winnerPos.y}px)`;
     g.style.opacity = '0';
-    await new Promise<void>(resolve => setTimeout(resolve, flyDur));
+    await this.scaledDelay(this.baseTransitionDuration * 0.8);
     g.remove();
   }
 
@@ -172,14 +193,14 @@ export class TreeRenderer {
     // Fade in at children midpoint
     g.style.transition = 'opacity 0.2s ease';
     g.style.opacity = '1';
-    await new Promise<void>(resolve => setTimeout(resolve, 600));
+    await this.scaledDelay(this.baseTransitionDuration * 0.6);
 
     // Fly up to parent and fade out simultaneously
     const dur = this.transitionDuration;
     g.style.transition = `opacity ${dur}ms ease, transform ${dur}ms ease`;
     g.style.transform = `translate(${pp.x}px, ${pp.y}px)`;
     g.style.opacity = '0';
-    await new Promise<void>(resolve => setTimeout(resolve, dur));
+    await this.scaledDelay(this.baseTransitionDuration);
     g.remove();
   }
 

@@ -1,8 +1,10 @@
 import { TreeRenderer } from '../tree/TreeRenderer';
 
-const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 import { buildHuffmanSnapshots } from './HuffmanAlgorithm';
 import type { SymbolInput, HuffmanSnapshot, SelectionStep } from './HuffmanAlgorithm';
+
+const BASE_STEP_MS = 1200; // how long each pseudocode phase is shown at 1× speed
+const BASE_ANIM_MS = 500;  // CSS transition duration for node moves at 1× speed
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
   { symbol: 'a', freq: 5 },
@@ -26,26 +28,26 @@ const O = (s: string) => `<span class="po">${s}</span>`;
 const C = (s: string) => `<span class="pc">${s}</span>`;
 
 const PSEUDO_LINES: PseudoLine[] = [
-  { id: 'fn-huf',    indent: 0, html: `${K('def')} ${F('huffman')}(symbols):` },
-  { id: 'q1-init',   indent: 1, html: `Q₁ = ${F('sort')}(symbols, key = ${O('λ')} s: s.freq)` },
-  { id: 'q2-init',   indent: 1, html: `Q₂ = []` },
-  { id: 'while',     indent: 1, html: `${K('while')} ${O('|')}Q₁${O('|')} + ${O('|')}Q₂${O('|')} > 1:` },
-  { id: 'deq-a',     indent: 2, html: `a = ${F('dequeue_min')}(Q₁, Q₂)` },
-  { id: 'deq-b',     indent: 2, html: `b = ${F('dequeue_min')}(Q₁, Q₂)` },
-  { id: 'node-new',  indent: 2, html: `node = ${F('Node')}(` },
+  { id: 'fn-huf', indent: 0, html: `${K('def')} ${F('huffman')}(symbols):` },
+  { id: 'q1-init', indent: 1, html: `Q₁ = ${F('sort')}(symbols, key = ${O('λ')} s: s.freq)` },
+  { id: 'q2-init', indent: 1, html: `Q₂ = []` },
+  { id: 'while', indent: 1, html: `${K('while')} ${O('|')}Q₁${O('|')} + ${O('|')}Q₂${O('|')} > 1:` },
+  { id: 'deq-a', indent: 2, html: `a = ${F('dequeue_min')}(Q₁, Q₂)` },
+  { id: 'deq-b', indent: 2, html: `b = ${F('dequeue_min')}(Q₁, Q₂)` },
+  { id: 'node-new', indent: 2, html: `node = ${F('Node')}(` },
   { id: 'node-freq', indent: 3, html: `freq  = a.freq + b.freq,` },
-  { id: 'node-lr',   indent: 3, html: `left  = a,  right = b` },
-  { id: 'node-lr',   indent: 2, html: `)` },
-  { id: 'q2-app',    indent: 2, html: `Q₂.${F('append')}(node)` },
-  { id: 'return',    indent: 1, html: `${K('return')} Q₁[0] ${K('if')} ${O('|')}Q₂${O('|')}=0 ${K('else')} Q₂[0]` },
-  { id: '',          indent: 0, html: '' },
-  { id: 'fn-deq',    indent: 0, html: `${K('def')} ${F('dequeue_min')}(Q₁, Q₂):` },
-  { id: 'deq-q1e',   indent: 1, html: `${K('if')} ${O('|')}Q₁${O('|')} = 0: ${K('return')} Q₂.${F('pop_front')}()` },
-  { id: 'deq-q2e',   indent: 1, html: `${K('if')} ${O('|')}Q₂${O('|')} = 0: ${K('return')} Q₁.${F('pop_front')}()` },
-  { id: 'deq-cmp',   indent: 1, html: `${K('if')} Q₁[0].freq ${O('≤')} Q₂[0].freq:` },
-  { id: 'deq-r-q1',  indent: 2, html: `${K('return')} Q₁.${F('pop_front')}()  ${C('▷ ties → Q₁')}` },
-  { id: 'deq-else',  indent: 1, html: `${K('else')}:` },
-  { id: 'deq-r-q2',  indent: 2, html: `${K('return')} Q₂.${F('pop_front')}()` },
+  { id: 'node-lr', indent: 3, html: `left  = a,  right = b` },
+  { id: 'node-lr', indent: 2, html: `)` },
+  { id: 'q2-app', indent: 2, html: `Q₂.${F('append')}(node)` },
+  { id: 'return', indent: 1, html: `${K('return')} Q₁[0] ${K('if')} ${O('|')}Q₂${O('|')}=0 ${K('else')} Q₂[0]` },
+  { id: '', indent: 0, html: '' },
+  { id: 'fn-deq', indent: 0, html: `${K('def')} ${F('dequeue_min')}(Q₁, Q₂):` },
+  { id: 'deq-q1e', indent: 1, html: `${K('if')} ${O('|')}Q₁${O('|')} = 0: ${K('return')} Q₂.${F('pop_front')}()` },
+  { id: 'deq-q2e', indent: 1, html: `${K('if')} ${O('|')}Q₂${O('|')} = 0: ${K('return')} Q₁.${F('pop_front')}()` },
+  { id: 'deq-cmp', indent: 1, html: `${K('if')} Q₁[0].freq ${O('≤')} Q₂[0].freq:` },
+  { id: 'deq-r-q1', indent: 2, html: `${K('return')} Q₁.${F('pop_front')}()  ${C('▷ ties → Q₁')}` },
+  { id: 'deq-else', indent: 1, html: `${K('else')}:` },
+  { id: 'deq-r-q2', indent: 2, html: `${K('return')} Q₂.${F('pop_front')}()` },
 ];
 
 function deqCompareLines(step: SelectionStep): string[] {
@@ -81,7 +83,7 @@ function getPseudoLines(snap: HuffmanSnapshot, stepIndex: number): string[] {
 // A BiPhase has a forward action and its exact inverse.
 // Next runs forward phases in order; Prev runs backward phases in reverse order.
 interface BiPhase {
-  forward:  () => Promise<void>;
+  forward: () => Promise<void>;
   backward: () => Promise<void>;
 }
 
@@ -102,6 +104,21 @@ export class HuffmanDemo {
   private completedPhases: BiPhase[] = [];
   private isAnimating = false;
   private isPlaying = true;
+  private speedMultiplier = 1;
+
+  private scaledDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      const start = performance.now();
+      const tick = () => {
+        if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
 
   private stepLabel!: HTMLElement;
   private stepDesc!: HTMLElement;
@@ -193,7 +210,7 @@ export class HuffmanDemo {
     if (allDone) {
       this.isPlaying = true;
       this.updateNavButtons();
-      void this.goToCompletedStep(0).then(() => void this.playLoop());
+      void this.goToStep(0, /*forward=*/true).then(() => void this.playLoop());
       return;
     }
     this.isPlaying = !this.isPlaying;
@@ -256,12 +273,13 @@ export class HuffmanDemo {
       await this.runPhase(first.forward);
       this.completedPhases.push(first);
     } else {
-      // Non-merge step or initial display: single render, no phase queue
+      // Non-merge step: render and hold so the step is visible during auto-play
       this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
       this.remainingPhases = [];
       this.completedPhases = [];
       await this.runPhase(async () => {
         this.renderer.update(snap.tree, snap.sections);
+        await this.scaledDelay(BASE_STEP_MS);
       });
     }
   }
@@ -291,7 +309,7 @@ export class HuffmanDemo {
   // Must be called with this.currentStep already set to the merge snapshot's index.
   private buildBiPhases(snap: HuffmanSnapshot): BiPhase[] {
     const prevIndex = this.currentStep - 1;
-    const prevSnap  = this.snapshots[prevIndex];
+    const prevSnap = this.snapshots[prevIndex];
     const prevPseudoCompleted = prevSnap
       ? getPseudoLines(prevSnap, prevIndex)
       : [];
@@ -303,22 +321,22 @@ export class HuffmanDemo {
     // ── Phase: while condition ──────────────────────────────────────────────
     const p0Before = pseudoState;
     phases.push({
-      forward:  async () => { this.updatePseudoHighlight(['while']); },
+      forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
       backward: async () => { this.updatePseudoHighlight(p0Before); },
     });
     pseudoState = ['while'];
 
     // ── Phases: two dequeue selections ─────────────────────────────────────
     for (let si = 0; si < snap.selectionSteps!.length; si++) {
-      const step      = snap.selectionSteps![si];
-      const deqLine   = si === 0 ? 'deq-a' : 'deq-b';
+      const step = snap.selectionSteps![si];
+      const deqLine = si === 0 ? 'deq-a' : 'deq-b';
       const candidates = [step.q1CandidateId, step.q2CandidateId]
         .filter((id): id is string => !!id);
 
       if (candidates.length >= 2) {
         // Comparison phase (blue highlight + flying label)
         const cmpBefore = pseudoState;
-        const cmpLines  = [deqLine, ...deqCompareLines(step)];
+        const cmpLines = [deqLine, ...deqCompareLines(step)];
         phases.push({
           forward: async () => {
             this.updatePseudoHighlight(cmpLines);
@@ -339,14 +357,14 @@ export class HuffmanDemo {
       }
 
       // Selection phase (amber highlight)
-      const selBefore  = pseudoState;
-      const selLines   = [deqLine, ...deqSelectedLines(step)];
+      const selBefore = pseudoState;
+      const selLines = [deqLine, ...deqSelectedLines(step)];
       const selectedId = step.selectedId;
       phases.push({
         forward: async () => {
           this.updatePseudoHighlight(selLines);
           this.renderer.setHighlight([selectedId], true);
-          await delay(100); // let CSS colour transition render
+          await this.scaledDelay(BASE_STEP_MS);
         },
         backward: async () => {
           this.updatePseudoHighlight(selBefore);
@@ -357,17 +375,17 @@ export class HuffmanDemo {
     }
 
     // ── Phase: node creation + merge animation + sum label ─────────────────
-    const mergeLines  = [
+    const mergeLines = [
       'node-new', 'node-freq', 'node-lr', 'q2-app',
       ...(snap.isComplete ? ['return'] : []),
     ];
-    const mergeBefore  = pseudoState;
-    const mergingIds   = [...snap.mergingIds!] as [string, string];
+    const mergeBefore = pseudoState;
+    const mergingIds = [...snap.mergingIds!] as [string, string];
     phases.push({
       forward: async () => {
         this.updatePseudoHighlight(mergeLines);
         this.renderer.update(snap.tree, snap.sections);
-        await delay(this.renderer.transitionDuration);
+        await this.scaledDelay(BASE_ANIM_MS);
         this.renderer.setHighlight(mergingIds, false);
         if (snap.mergingFreqs && snap.mergedParentId) {
           await this.renderer.showSumAnimation(
@@ -381,7 +399,7 @@ export class HuffmanDemo {
         // Re-render prevSnap tree (reverse of merge) then restore both nodes amber
         this.updatePseudoHighlight(mergeBefore);
         this.renderer.update(prevSnap.tree, prevSnap.sections);
-        await delay(this.renderer.transitionDuration);
+        await this.scaledDelay(BASE_ANIM_MS);
         this.renderer.setHighlight(mergingIds, true);
       },
     });
@@ -506,7 +524,11 @@ export class HuffmanDemo {
 
     this.container.innerHTML = '';
     while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
-    this.renderer = new TreeRenderer({ svgEl: this.svgEl });
+    this.renderer = new TreeRenderer({
+      svgEl: this.svgEl,
+      transitionDuration: BASE_ANIM_MS,
+      getSpeedMultiplier: () => this.speedMultiplier,
+    });
     this.svgEl.style.display = '';
     this.pseudoEl.style.display = '';
 
@@ -553,8 +575,30 @@ export class HuffmanDemo {
     controls.appendChild(this.playBtn);
     controls.appendChild(this.nextBtn);
 
+    const speedRow = document.createElement('div');
+    speedRow.className = 'viz-speed';
+
+    const speedLabel = document.createElement('span');
+    speedLabel.className = 'speed-label';
+    speedLabel.textContent = 'Speed';
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(Math.log2(0.2));
+    slider.max = String(Math.log2(2));
+    slider.step = '0.01';
+    slider.value = '0'; // log2(1) = 0 → 1× speed
+    slider.className = 'speed-slider';
+    slider.addEventListener('input', () => {
+      this.speedMultiplier = Math.pow(2, parseFloat(slider.value));
+    });
+
+    speedRow.appendChild(speedLabel);
+    speedRow.appendChild(slider);
+
     phase.appendChild(header);
     phase.appendChild(controls);
+    phase.appendChild(speedRow);
     this.container.appendChild(phase);
 
     void this.goToStep(0, /*forward=*/false).then(() => {
