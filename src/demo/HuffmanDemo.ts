@@ -101,10 +101,12 @@ export class HuffmanDemo {
   // Phases already run (Prev consumes from back)
   private completedPhases: BiPhase[] = [];
   private isAnimating = false;
+  private isPlaying = true;
 
   private stepLabel!: HTMLElement;
   private stepDesc!: HTMLElement;
   private prevBtn!: HTMLButtonElement;
+  private playBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
 
   constructor(container: HTMLElement, svgEl: SVGSVGElement, pseudoEl: HTMLElement) {
@@ -154,6 +156,7 @@ export class HuffmanDemo {
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
+    // playBtn stays interactive so the user can pause mid-animation
     await fn();
     this.isAnimating = false;
     this.updateNavButtons();
@@ -165,6 +168,42 @@ export class HuffmanDemo {
     this.prevBtn.disabled = this.currentStep === 0 && this.completedPhases.length === 0;
     this.nextBtn.disabled = allDone;
     this.nextBtn.textContent = allDone ? 'Done ✓' : 'Next →';
+    if (allDone) {
+      this.playBtn.disabled = false;
+      this.playBtn.textContent = '↺ Replay';
+      this.playBtn.className = 'btn-primary';
+    } else {
+      this.playBtn.disabled = false;
+      this.playBtn.textContent = this.isPlaying ? '⏸ Pause' : '▶ Play';
+      this.playBtn.className = this.isPlaying ? 'btn-secondary' : 'btn-primary';
+    }
+  }
+
+  private togglePlay(): void {
+    const snap = this.snapshots[this.currentStep];
+    const allDone = snap.isComplete && this.remainingPhases.length === 0;
+    if (allDone) {
+      this.isPlaying = true;
+      this.updateNavButtons();
+      void this.goToCompletedStep(0).then(() => void this.playLoop());
+      return;
+    }
+    this.isPlaying = !this.isPlaying;
+    this.updateNavButtons();
+    if (this.isPlaying) void this.playLoop();
+  }
+
+  private async playLoop(): Promise<void> {
+    while (this.isPlaying) {
+      if (this.isAnimating) break; // current phase still running; loop resumes after
+      const snap = this.snapshots[this.currentStep];
+      if (snap.isComplete && this.remainingPhases.length === 0) {
+        this.isPlaying = false;
+        this.updateNavButtons();
+        break;
+      }
+      await this.handleNext();
+    }
   }
 
   private async handleNext(): Promise<void> {
@@ -180,6 +219,10 @@ export class HuffmanDemo {
 
   private async handlePrev(): Promise<void> {
     if (this.isAnimating) return;
+    if (this.isPlaying) {
+      this.isPlaying = false;
+      this.updateNavButtons();
+    }
     if (this.completedPhases.length > 0) {
       const phase = this.completedPhases.pop()!;
       await this.runPhase(phase.backward);
@@ -488,19 +531,27 @@ export class HuffmanDemo {
     this.prevBtn.textContent = '← Prev';
     this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
 
+    this.playBtn = document.createElement('button');
+    this.playBtn.className = 'btn-secondary';
+    this.playBtn.textContent = '⏸ Pause';
+    this.playBtn.addEventListener('click', () => this.togglePlay());
+
     this.nextBtn = document.createElement('button');
-    this.nextBtn.className = 'btn-primary';
+    this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next →';
     this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
 
     controls.appendChild(resetBtn);
     controls.appendChild(this.prevBtn);
+    controls.appendChild(this.playBtn);
     controls.appendChild(this.nextBtn);
 
     phase.appendChild(header);
     phase.appendChild(controls);
     this.container.appendChild(phase);
 
-    void this.goToStep(0, /*forward=*/false);
+    void this.goToStep(0, /*forward=*/false).then(() => {
+      if (this.isPlaying) void this.playLoop();
+    });
   }
 }
