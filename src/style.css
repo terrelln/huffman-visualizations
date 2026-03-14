@@ -16,53 +16,161 @@ body {
 }
 
 h1 {
-  font-size: 2rem;
-  margin: 0 0 8px;
-}
-
-p {
+  font-size: 1.75rem;
   margin: 0 0 24px;
-  color: #6c757d;
 }
 
-#controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
-}
+/* ── Buttons ────────────────────────────────────────────────────────────── */
 
-#next-btn {
-  padding: 8px 20px;
-  font-size: 1rem;
+button {
+  font-family: inherit;
+  font-size: 0.9rem;
   cursor: pointer;
-  border: 1px solid #adb5bd;
   border-radius: 6px;
-  background: #fff;
-  transition: background 0.15s, border-color 0.15s;
+  padding: 7px 16px;
+  border: 1px solid transparent;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
 
-#next-btn:hover:not(:disabled) {
+.btn-primary {
+  background: #212529;
+  color: #fff;
+  border-color: #212529;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #343a40;
+}
+
+.btn-secondary {
+  background: #fff;
+  color: #212529;
+  border-color: #adb5bd;
+}
+
+.btn-secondary:hover:not(:disabled) {
   background: #e9ecef;
   border-color: #6c757d;
 }
 
-#next-btn:disabled {
+button:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-#step-label {
-  color: #6c757d;
-  font-size: 0.9rem;
+/* ── Input phase ────────────────────────────────────────────────────────── */
+
+.phase-input {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
 }
+
+.symbol-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.symbol-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sym-input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  width: 120px;
+}
+
+.freq-input {
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  width: 80px;
+}
+
+.sym-input:focus,
+.freq-input:focus {
+  outline: 2px solid #212529;
+  outline-offset: 1px;
+}
+
+.remove-btn {
+  padding: 4px 9px;
+  font-size: 1rem;
+  background: transparent;
+  color: #adb5bd;
+  border-color: transparent;
+}
+
+.remove-btn:hover:not(:disabled) {
+  color: #dc3545;
+  background: transparent;
+  border-color: transparent;
+}
+
+.input-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.input-error {
+  margin: 0;
+  color: #dc3545;
+  font-size: 0.875rem;
+}
+
+/* ── Viz phase ──────────────────────────────────────────────────────────── */
+
+.phase-viz {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.viz-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+}
+
+.step-desc {
+  margin: 0;
+  font-size: 1rem;
+  color: #212529;
+}
+
+.viz-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ── SVG tree ───────────────────────────────────────────────────────────── */
 
 #tree-svg {
   display: block;
   overflow: visible;
 }
 
-/* Tree node groups */
 .tree-node {
   transform-box: fill-box;
   transform-origin: center;
@@ -84,7 +192,6 @@ p {
   user-select: none;
 }
 
-/* Tree edges */
 .tree-edge {
   stroke: #adb5bd;
   stroke-width: 1.5;

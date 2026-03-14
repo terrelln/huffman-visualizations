@@ -1,8 +1,9 @@
 import type { Tree } from './BinaryTree';
 
-const H_GAP = 80;
-const V_GAP = 70;
+const H_GAP = 60;
+const V_GAP = 80;
 const PADDING = 60;
+const FOREST_GAP = 60; // horizontal gap between independent subtrees
 
 export interface Position {
   x: number;
@@ -15,19 +16,19 @@ export interface Layout {
   totalHeight: number;
 }
 
-export function computeLayout(tree: Tree): Layout {
-  const columnMap = new Map<string, number>();
-  const depthMap = new Map<string, number>();
-  let columnCounter = 0;
+interface Extent {
+  minX: number;
+  maxX: number;
+}
 
-  function assignColumns(nodeId: string | undefined): void {
-    if (!nodeId) return;
-    const node = tree.nodes.get(nodeId);
-    if (!node) return;
-    assignColumns(node.leftId);
-    columnMap.set(nodeId, columnCounter++);
-    assignColumns(node.rightId);
+export function computeLayout(tree: Tree): Layout {
+  const { rootIds } = tree;
+  if (rootIds.length === 0) {
+    return { positions: new Map(), totalWidth: 0, totalHeight: 0 };
   }
+
+  const xMap = new Map<string, number>();
+  const depthMap = new Map<string, number>();
 
   function assignDepths(nodeId: string | undefined, depth: number): void {
     if (!nodeId) return;
@@ -38,28 +39,60 @@ export function computeLayout(tree: Tree): Layout {
     assignDepths(node.rightId, depth + 1);
   }
 
-  if (tree.rootId) {
-    assignColumns(tree.rootId);
-    assignDepths(tree.rootId, 0);
+  // Place subtree centered at x=0; return its bounding extent relative to that origin.
+  // Children are offset by ±o where o ≥ H_GAP and no two nodes at the same depth
+  // are closer than H_GAP apart — giving equal-angle edges throughout.
+  function placeSubtree(nodeId: string): Extent {
+    const node = tree.nodes.get(nodeId)!;
+    xMap.set(nodeId, 0);
+
+    const isLeaf = !node.leftId && !node.rightId;
+    if (isLeaf) return { minX: 0, maxX: 0 };
+
+    const leftExtent: Extent = node.leftId ? placeSubtree(node.leftId) : { minX: 0, maxX: 0 };
+    const rightExtent: Extent = node.rightId ? placeSubtree(node.rightId) : { minX: 0, maxX: 0 };
+
+    const o = Math.max(H_GAP, (leftExtent.maxX - rightExtent.minX + H_GAP) / 2);
+
+    if (node.leftId) shiftSubtree(node.leftId, -o);
+    if (node.rightId) shiftSubtree(node.rightId, +o);
+
+    return {
+      minX: node.leftId ? -o + leftExtent.minX : 0,
+      maxX: node.rightId ? +o + rightExtent.maxX : 0,
+    };
   }
 
-  const positions = new Map<string, Position>();
-  let maxCol = 0;
-  let maxDepth = 0;
+  function shiftSubtree(nodeId: string, dx: number): void {
+    xMap.set(nodeId, (xMap.get(nodeId) ?? 0) + dx);
+    const node = tree.nodes.get(nodeId)!;
+    if (node.leftId) shiftSubtree(node.leftId, dx);
+    if (node.rightId) shiftSubtree(node.rightId, dx);
+  }
 
-  for (const [id, col] of columnMap) {
+  // Lay out each subtree independently, then arrange them side by side.
+  for (const rootId of rootIds) assignDepths(rootId, 0);
+  const extents = rootIds.map(id => placeSubtree(id));
+
+  let cursor = PADDING;
+  for (let i = 0; i < rootIds.length; i++) {
+    const { minX, maxX } = extents[i];
+    shiftSubtree(rootIds[i], cursor - minX);
+    cursor += maxX - minX + FOREST_GAP;
+  }
+  const totalWidth = cursor - FOREST_GAP + PADDING;
+
+  const positions = new Map<string, Position>();
+  let maxDepth = 0;
+  for (const [id, x] of xMap) {
     const depth = depthMap.get(id) ?? 0;
-    positions.set(id, {
-      x: PADDING + col * H_GAP,
-      y: PADDING + depth * V_GAP,
-    });
-    if (col > maxCol) maxCol = col;
+    positions.set(id, { x, y: PADDING + depth * V_GAP });
     if (depth > maxDepth) maxDepth = depth;
   }
 
   return {
     positions,
-    totalWidth: PADDING * 2 + maxCol * H_GAP,
+    totalWidth,
     totalHeight: PADDING * 2 + maxDepth * V_GAP,
   };
 }

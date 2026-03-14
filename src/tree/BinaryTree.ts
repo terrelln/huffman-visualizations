@@ -7,13 +7,15 @@ export interface TreeNode {
 
 export interface Tree {
   nodes: Map<string, TreeNode>;
-  rootId: string | null;
+  rootIds: string[]; // one entry per independent subtree (forest support)
 }
 
-export function makeTree(rootId: string | null, nodes: TreeNode[]): Tree {
+export function makeTree(rootIds: string | string[] | null, nodes: TreeNode[]): Tree {
   const map = new Map<string, TreeNode>();
-  for (const node of nodes) {
-    map.set(node.id, node);
-  }
-  return { nodes: map, rootId };
+  for (const node of nodes) map.set(node.id, node);
+  const ids =
+    rootIds == null ? [] :
+    Array.isArray(rootIds) ? rootIds :
+    [rootIds];
+  return { nodes: map, rootIds: ids };
 }
