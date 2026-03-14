@@ -72,6 +72,81 @@ export class TreeRenderer {
     });
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  private parseXY(id: string): { x: number; y: number } | null {
+    const t = this.nodeGroupMap.get(id)?.style.transform;
+    if (!t) return null;
+    const m = t.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
+    return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
+  }
+
+  /**
+   * Spawn a floating label at (fromX, fromY), fade it in, dwell, then fly to
+   * (toX, toY) while fading out. Used by both forward and reverse animations so
+   * each pair is guaranteed to be the exact mirror of the other.
+   *
+   * @param groupClass  CSS class on the <g> (e.g. 'comparison-label').
+   *                    Text gets `${groupClass}-text`; bg rect gets `${groupClass}-bg`.
+   * @param dwellBaseMs Base dwell duration before flying (speed-scaled internally).
+   * @param flyBaseMs   Base fly/fade duration (speed-scaled internally).
+   */
+  private async flyLabel(
+    groupClass: string,
+    labelText: string,
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number,
+    dwellBaseMs: number,
+    flyBaseMs: number,
+  ): Promise<void> {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.classList.add(groupClass);
+    g.style.transform = `translate(${fromX}px, ${fromY}px)`;
+    g.style.opacity = '0';
+
+    const textEl = document.createElementNS(SVG_NS, 'text');
+    textEl.classList.add(`${groupClass}-text`);
+    textEl.textContent = labelText;
+    textEl.setAttribute('text-anchor', 'middle');
+    textEl.setAttribute('dominant-baseline', 'central');
+    g.appendChild(textEl);
+    this.nodesGroup.appendChild(g);
+
+    // Wait two rAFs so the element is in the DOM and we can measure it.
+    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+      try {
+        const bb = (textEl as SVGTextElement).getBBox();
+        const pad = 6;
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.classList.add(`${groupClass}-bg`);
+        rect.setAttribute('x',      String(bb.x - pad));
+        rect.setAttribute('y',      String(bb.y - pad));
+        rect.setAttribute('width',  String(bb.width  + pad * 2));
+        rect.setAttribute('height', String(bb.height + pad * 2));
+        rect.setAttribute('rx', '4');
+        g.insertBefore(rect, textEl);
+      } catch {}
+      resolve();
+    })));
+
+    // Fade in at origin, then dwell.
+    g.style.transition = 'opacity 0.2s ease';
+    g.style.opacity = '1';
+    await this.scaledDelay(dwellBaseMs);
+
+    // Fly to destination and fade out.
+    const flyDur = Math.round(flyBaseMs / this.getSpeedMultiplier());
+    g.style.transition = `opacity ${flyDur}ms ease, transform ${flyDur}ms ease`;
+    g.style.transform = `translate(${toX}px, ${toY}px)`;
+    g.style.opacity = '0';
+    await this.scaledDelay(flyBaseMs);
+    g.remove();
+  }
+
+  // ── Comparison animation ─────────────────────────────────────────────────────
+
   async showComparisonAnimation(
     q1Id: string,
     q2Id: string,
@@ -79,65 +154,51 @@ export class TreeRenderer {
     q2Freq: number,
     selectedId: string,
   ): Promise<void> {
-    const parseXY = (id: string) => {
-      const t = this.nodeGroupMap.get(id)?.style.transform;
-      if (!t) return null;
-      const m = t.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
-      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-    };
-
-    const q1pos = parseXY(q1Id);
-    const q2pos = parseXY(q2Id);
+    const q1pos = this.parseXY(q1Id);
+    const q2pos = this.parseXY(q2Id);
     if (!q1pos || !q2pos) return;
 
     const op = q1Freq < q2Freq ? '<' : q1Freq > q2Freq ? '>' : '=';
     const winnerPos = selectedId === q1Id ? q1pos : q2pos;
-
     const startX = (q1pos.x + q2pos.x) / 2;
     const startY = Math.min(q1pos.y, q2pos.y) - 38;
 
-    const g = document.createElementNS(SVG_NS, 'g');
-    g.classList.add('comparison-label');
-    g.style.transform = `translate(${startX}px, ${startY}px)`;
-    g.style.opacity = '0';
-
-    const text = document.createElementNS(SVG_NS, 'text');
-    text.classList.add('comparison-label-text');
-    text.textContent = `${q1Freq} ${op} ${q2Freq}`;
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('dominant-baseline', 'central');
-    g.appendChild(text);
-    this.nodesGroup.appendChild(g);
-
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
-      try {
-        const bb = (text as SVGTextElement).getBBox();
-        const pad = 6;
-        const rect = document.createElementNS(SVG_NS, 'rect');
-        rect.classList.add('comparison-label-bg');
-        rect.setAttribute('x', String(bb.x - pad));
-        rect.setAttribute('y', String(bb.y - pad));
-        rect.setAttribute('width',  String(bb.width  + pad * 2));
-        rect.setAttribute('height', String(bb.height + pad * 2));
-        rect.setAttribute('rx', '4');
-        g.insertBefore(rect, text);
-      } catch {}
-      resolve();
-    })));
-
-    // Fade in
-    g.style.transition = 'opacity 0.2s ease';
-    g.style.opacity = '1';
-    await this.scaledDelay(this.baseTransitionDuration);
-
-    // Fly toward winner and fade out
-    const flyDur = this.transitionDuration * 0.8;
-    g.style.transition = `opacity ${flyDur}ms ease, transform ${flyDur}ms ease`;
-    g.style.transform = `translate(${winnerPos.x}px, ${winnerPos.y}px)`;
-    g.style.opacity = '0';
-    await this.scaledDelay(this.baseTransitionDuration * 0.8);
-    g.remove();
+    await this.flyLabel(
+      'comparison-label', `${q1Freq} ${op} ${q2Freq}`,
+      startX, startY,
+      winnerPos.x, winnerPos.y,
+      this.baseTransitionDuration,        // dwell
+      this.baseTransitionDuration * 0.8,  // fly
+    );
   }
+
+  /** Reverse of showComparisonAnimation: label starts at winner and flies back to center. */
+  async showComparisonAnimationReverse(
+    q1Id: string,
+    q2Id: string,
+    q1Freq: number,
+    q2Freq: number,
+    selectedId: string,
+  ): Promise<void> {
+    const q1pos = this.parseXY(q1Id);
+    const q2pos = this.parseXY(q2Id);
+    if (!q1pos || !q2pos) return;
+
+    const op = q1Freq < q2Freq ? '<' : q1Freq > q2Freq ? '>' : '=';
+    const winnerPos = selectedId === q1Id ? q1pos : q2pos;
+    const endX = (q1pos.x + q2pos.x) / 2;
+    const endY = Math.min(q1pos.y, q2pos.y) - 38;
+
+    await this.flyLabel(
+      'comparison-label', `${q1Freq} ${op} ${q2Freq}`,
+      winnerPos.x, winnerPos.y,
+      endX, endY,
+      this.baseTransitionDuration,        // dwell
+      this.baseTransitionDuration * 0.8,  // fly
+    );
+  }
+
+  // ── Sum animation ────────────────────────────────────────────────────────────
 
   async showSumAnimation(
     leftId: string,
@@ -146,64 +207,53 @@ export class TreeRenderer {
     rightFreq: number,
     parentId: string,
   ): Promise<void> {
-    const parseXY = (id: string) => {
-      const t = this.nodeGroupMap.get(id)?.style.transform;
-      if (!t) return null;
-      const m = t.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
-      return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : null;
-    };
-
-    const lp = parseXY(leftId);
-    const rp = parseXY(rightId);
-    const pp = parseXY(parentId);
+    const lp = this.parseXY(leftId);
+    const rp = this.parseXY(rightId);
+    const pp = this.parseXY(parentId);
     if (!lp || !rp || !pp) return;
 
     const startX = (lp.x + rp.x) / 2;
     const startY = (lp.y + rp.y) / 2;
 
-    const g = document.createElementNS(SVG_NS, 'g');
-    g.classList.add('sum-label');
-    g.style.transform = `translate(${startX}px, ${startY}px)`;
-    g.style.opacity = '0';
-
-    const text = document.createElementNS(SVG_NS, 'text');
-    text.classList.add('sum-label-text');
-    text.textContent = `${leftFreq} + ${rightFreq} = ${leftFreq + rightFreq}`;
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('dominant-baseline', 'central');
-    g.appendChild(text);
-    this.nodesGroup.appendChild(g);
-
-    // Size background rect after text is in DOM
-    await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
-      try {
-        const bb = (text as SVGTextElement).getBBox();
-        const pad = 6;
-        const rect = document.createElementNS(SVG_NS, 'rect');
-        rect.classList.add('sum-label-bg');
-        rect.setAttribute('x', String(bb.x - pad));
-        rect.setAttribute('y', String(bb.y - pad));
-        rect.setAttribute('width',  String(bb.width  + pad * 2));
-        rect.setAttribute('height', String(bb.height + pad * 2));
-        rect.setAttribute('rx', '4');
-        g.insertBefore(rect, text);
-      } catch {}
-      resolve();
-    })));
-
-    // Fade in at children midpoint
-    g.style.transition = 'opacity 0.2s ease';
-    g.style.opacity = '1';
-    await this.scaledDelay(this.baseTransitionDuration * 0.6);
-
-    // Fly up to parent and fade out simultaneously
-    const dur = this.transitionDuration;
-    g.style.transition = `opacity ${dur}ms ease, transform ${dur}ms ease`;
-    g.style.transform = `translate(${pp.x}px, ${pp.y}px)`;
-    g.style.opacity = '0';
-    await this.scaledDelay(this.baseTransitionDuration);
-    g.remove();
+    await this.flyLabel(
+      'sum-label', `${leftFreq} + ${rightFreq} = ${leftFreq + rightFreq}`,
+      startX, startY,
+      pp.x, pp.y,
+      this.baseTransitionDuration * 0.6,  // dwell
+      this.baseTransitionDuration,        // fly
+    );
   }
+
+  /**
+   * Reverse of showSumAnimation: label starts at parent and flies back to
+   * children midpoint. Must be called BEFORE renderer.update(prevSnap) so that
+   * parseXY(parentId) can still read the parent's position from nodeGroupMap.
+   */
+  async showSumAnimationReverse(
+    leftId: string,
+    rightId: string,
+    leftFreq: number,
+    rightFreq: number,
+    parentId: string,
+  ): Promise<void> {
+    const lp = this.parseXY(leftId);
+    const rp = this.parseXY(rightId);
+    const pp = this.parseXY(parentId);
+    if (!lp || !rp || !pp) return;
+
+    const endX = (lp.x + rp.x) / 2;
+    const endY = (lp.y + rp.y) / 2;
+
+    await this.flyLabel(
+      'sum-label', `${leftFreq} + ${rightFreq} = ${leftFreq + rightFreq}`,
+      pp.x, pp.y,
+      endX, endY,
+      this.baseTransitionDuration * 0.6,  // dwell
+      this.baseTransitionDuration,        // fly
+    );
+  }
+
+  // ── Node state ───────────────────────────────────────────────────────────────
 
   clearHighlights(): void {
     for (const el of this.nodeGroupMap.values()) {

@@ -78,11 +78,11 @@ function getPseudoLines(snap: HuffmanSnapshot, stepIndex: number): string[] {
   return result;
 }
 
-// ── Phase types ──────────────────────────────────────────────────────────────
+// ── Action types ─────────────────────────────────────────────────────────────
 
-// A BiPhase has a forward action and its exact inverse.
-// Next runs forward phases in order; Prev runs backward phases in reverse order.
-interface BiPhase {
+// An Action has a forward step and its exact inverse.
+// Next runs actions forward in order; Prev runs them backward in reverse order.
+interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
 }
@@ -98,10 +98,10 @@ export class HuffmanDemo {
   private snapshots: HuffmanSnapshot[] = [];
   private currentStep = 0;
 
-  // Phases not yet run (Next consumes from front)
-  private remainingPhases: BiPhase[] = [];
-  // Phases already run (Prev consumes from back)
-  private completedPhases: BiPhase[] = [];
+  // Actions not yet run (Next consumes from front)
+  private remainingActions: Action[] = [];
+  // Actions already run (Prev consumes from back)
+  private completedActions: Action[] = [];
   private isAnimating = false;
   private isPlaying = true;
   private speedMultiplier = 1;
@@ -187,8 +187,8 @@ export class HuffmanDemo {
 
   private updateNavButtons(): void {
     const snap = this.snapshots[this.currentStep];
-    const allDone = snap.isComplete && this.remainingPhases.length === 0 && !this.isAnimating;
-    this.prevBtn.disabled = this.currentStep === 0 && this.completedPhases.length === 0;
+    const allDone = snap.isComplete && this.remainingActions.length === 0 && !this.isAnimating;
+    this.prevBtn.disabled = this.currentStep === 0 && this.completedActions.length === 0;
     this.nextBtn.disabled = allDone;
     this.nextBtn.textContent = allDone ? 'Done ✓' : 'Next →';
     if (allDone) {
@@ -204,7 +204,7 @@ export class HuffmanDemo {
 
   private togglePlay(): void {
     const snap = this.snapshots[this.currentStep];
-    const allDone = snap.isComplete && this.remainingPhases.length === 0 && !this.isAnimating;
+    const allDone = snap.isComplete && this.remainingActions.length === 0 && !this.isAnimating;
     if (allDone) {
       this.isPlaying = true;
       this.updateNavButtons();
@@ -219,7 +219,7 @@ export class HuffmanDemo {
   private async playLoop(): Promise<void> {
     while (this.isPlaying) {
       const snap = this.snapshots[this.currentStep];
-      if (snap.isComplete && this.remainingPhases.length === 0) {
+      if (snap.isComplete && this.remainingActions.length === 0) {
         this.isPlaying = false;
         this.updateNavButtons();
         break;
@@ -230,10 +230,10 @@ export class HuffmanDemo {
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
-    if (this.remainingPhases.length > 0) {
-      const phase = this.remainingPhases.shift()!;
+    if (this.remainingActions.length > 0) {
+      const phase = this.remainingActions.shift()!;
       await this.runPhase(phase.forward);
-      this.completedPhases.push(phase);
+      this.completedActions.push(phase);
     } else {
       await this.goToStep(this.currentStep + 1, /*forward=*/true);
     }
@@ -245,9 +245,9 @@ export class HuffmanDemo {
       this.isPlaying = false;
       this.updateNavButtons();
     }
-    if (this.completedPhases.length > 0) {
-      const phase = this.completedPhases.pop()!;
-      this.remainingPhases.unshift(phase);
+    if (this.completedActions.length > 0) {
+      const phase = this.completedActions.pop()!;
+      this.remainingActions.unshift(phase);
       await this.runPhase(phase.backward);
     } else {
       await this.goToCompletedStep(this.currentStep - 1);
@@ -262,17 +262,17 @@ export class HuffmanDemo {
 
     if (forward && snap.selectionSteps) {
       // Merge step: build bidirectional phase queue, run first phase
-      const phases = this.buildBiPhases(snap);
-      this.remainingPhases = phases;
-      this.completedPhases = [];
-      const first = this.remainingPhases.shift()!;
+      const phases = this.buildActions(snap);
+      this.remainingActions = phases;
+      this.completedActions = [];
+      const first = this.remainingActions.shift()!;
       await this.runPhase(first.forward);
-      this.completedPhases.push(first);
+      this.completedActions.push(first);
     } else {
       // Non-merge step: render and hold so the step is visible during auto-play
       this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
-      this.remainingPhases = [];
-      this.completedPhases = [];
+      this.remainingActions = [];
+      this.completedActions = [];
       await this.runPhase(async () => {
         this.renderer.update(snap.tree, snap.sections);
         await this.scaledDelay(BASE_STEP_MS);
@@ -281,7 +281,7 @@ export class HuffmanDemo {
   }
 
   // Jump to a snapshot in its completed state (used by Prev when crossing snapshots).
-  // Reconstructs completedPhases so Prev can continue undoing into it.
+  // Reconstructs completedActions so Prev can continue undoing into it.
   private async goToCompletedStep(index: number): Promise<void> {
     if (index < 0) return;
     this.currentStep = index;
@@ -290,8 +290,8 @@ export class HuffmanDemo {
     this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
 
     // Reconstruct all phases as "completed" so Prev can undo them in reverse
-    this.completedPhases = snap.selectionSteps ? this.buildBiPhases(snap) : [];
-    this.remainingPhases = [];
+    this.completedActions = snap.selectionSteps ? this.buildActions(snap) : [];
+    this.remainingActions = [];
 
     await this.runPhase(async () => {
       this.renderer.clearHighlights();
@@ -299,28 +299,28 @@ export class HuffmanDemo {
     });
   }
 
-  // Build the ordered BiPhase list for one forward merge step.
+  // Build the ordered Action list for one forward merge step.
   // Must be called with this.currentStep already set to the merge snapshot's index.
-  private buildBiPhases(snap: HuffmanSnapshot): BiPhase[] {
+  private buildActions(snap: HuffmanSnapshot): Action[] {
     const prevIndex = this.currentStep - 1;
     const prevSnap = this.snapshots[prevIndex];
     const prevPseudoCompleted = prevSnap
       ? getPseudoLines(prevSnap, prevIndex)
       : [];
 
-    const phases: BiPhase[] = [];
-    // Track pseudocode state as phases are built, so each backward can restore the prior state.
+    const actions: Action[] = [];
+    // Track pseudocode state as actions are built, so each backward can restore the prior state.
     let pseudoState = prevPseudoCompleted;
 
-    // ── Phase: while condition ──────────────────────────────────────────────
+    // ── Action: while condition ─────────────────────────────────────────────
     const p0Before = pseudoState;
-    phases.push({
+    actions.push({
       forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
       backward: async () => { this.updatePseudoHighlight(p0Before); },
     });
     pseudoState = ['while'];
 
-    // ── Phases: two dequeue selections ─────────────────────────────────────
+    // ── Actions: two dequeue selections ────────────────────────────────────
     for (let si = 0; si < snap.selectionSteps!.length; si++) {
       const step = snap.selectionSteps![si];
       const deqLine = si === 0 ? 'deq-a' : 'deq-b';
@@ -331,7 +331,7 @@ export class HuffmanDemo {
         // Comparison phase (blue highlight + flying label)
         const cmpBefore = pseudoState;
         const cmpLines = [deqLine, ...deqCompareLines(step)];
-        phases.push({
+        actions.push({
           forward: async () => {
             this.updatePseudoHighlight(cmpLines);
             this.renderer.setComparing(candidates, true);
@@ -343,7 +343,14 @@ export class HuffmanDemo {
             this.renderer.setComparing(candidates, false);
           },
           backward: async () => {
-            // comparing was cleared by forward; just restore pseudocode
+            // Exact inverse of forward (steps 4r, 3r, 2r, 1r):
+            this.renderer.setComparing(candidates, true);
+            await this.renderer.showComparisonAnimationReverse(
+              step.q1CandidateId!, step.q2CandidateId!,
+              step.q1CandidateFreq!, step.q2CandidateFreq!,
+              step.selectedId,
+            );
+            this.renderer.setComparing(candidates, false);
             this.updatePseudoHighlight(cmpBefore);
           },
         });
@@ -354,25 +361,26 @@ export class HuffmanDemo {
       const selBefore = pseudoState;
       const selLines = [deqLine, ...deqSelectedLines(step)];
       const selectedId = step.selectedId;
-      phases.push({
+      actions.push({
         forward: async () => {
           this.updatePseudoHighlight(selLines);
           this.renderer.setHighlight([selectedId], true);
           await this.scaledDelay(BASE_STEP_MS);
         },
         backward: async () => {
-          this.updatePseudoHighlight(selBefore);
+          // Exact inverse of forward (steps 2r, 1r):
           this.renderer.setHighlight([selectedId], false);
+          this.updatePseudoHighlight(selBefore);
         },
       });
       pseudoState = selLines;
     }
 
-    // ── Phase: node creation + merge animation + sum label ─────────────────
+    // ── Action: node creation + merge animation + sum label ────────────────
     const mergeLines = ['node-new', 'node-freq', 'node-lr', 'q2-app'];
     const mergeBefore = pseudoState;
     const mergingIds = [...snap.mergingIds!] as [string, string];
-    phases.push({
+    actions.push({
       forward: async () => {
         this.updatePseudoHighlight(mergeLines);
         this.renderer.update(snap.tree, snap.sections);
@@ -387,29 +395,40 @@ export class HuffmanDemo {
         }
       },
       backward: async () => {
-        // Re-render prevSnap tree (reverse of merge) then restore both nodes amber
-        this.updatePseudoHighlight(mergeBefore);
+        // Exact inverse of forward (steps 5r, 4r, 3r, 2r, 1r):
+        // 5r: play sum animation in reverse — must run before renderer.update removes the parent
+        if (snap.mergingFreqs && snap.mergedParentId) {
+          await this.renderer.showSumAnimationReverse(
+            mergingIds[0], mergingIds[1],
+            snap.mergingFreqs[0], snap.mergingFreqs[1],
+            snap.mergedParentId,
+          );
+        }
+        // 4r: restore amber highlights on children
+        this.renderer.setHighlight(mergingIds, true);
+        // 3r+2r: revert to previous tree and wait for node transitions
         this.renderer.update(prevSnap.tree, prevSnap.sections);
         await this.scaledDelay(BASE_ANIM_MS);
-        this.renderer.setHighlight(mergingIds, true);
+        // 1r: restore pseudocode
+        this.updatePseudoHighlight(mergeBefore);
       },
     });
 
     if (snap.isComplete) {
-      // ── Phase: while condition exits (loop terminates) ──────────────────
-      phases.push({
+      // ── Action: while condition exits (loop terminates) ─────────────────
+      actions.push({
         forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
         backward: async () => { this.updatePseudoHighlight(mergeLines); },
       });
 
-      // ── Phase: return ───────────────────────────────────────────────────
-      phases.push({
+      // ── Action: return ──────────────────────────────────────────────────
+      actions.push({
         forward: async () => { this.updatePseudoHighlight(['return']); await this.scaledDelay(BASE_STEP_MS); },
         backward: async () => { this.updatePseudoHighlight(['while']); },
       });
     }
 
-    return phases;
+    return actions;
   }
 
   // ── Input phase ─────────────────────────────────────────────────────────────
@@ -524,8 +543,8 @@ export class HuffmanDemo {
   private startVisualization(inputs: SymbolInput[]): void {
     this.snapshots = buildHuffmanSnapshots(inputs);
     this.currentStep = 0;
-    this.remainingPhases = [];
-    this.completedPhases = [];
+    this.remainingActions = [];
+    this.completedActions = [];
 
     this.container.innerHTML = '';
     while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
