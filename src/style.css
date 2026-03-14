@@ -1,0 +1,91 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #f8f9fa;
+  color: #212529;
+}
+
+#app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+h1 {
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+p {
+  margin: 0 0 24px;
+  color: #6c757d;
+}
+
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+#next-btn {
+  padding: 8px 20px;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 1px solid #adb5bd;
+  border-radius: 6px;
+  background: #fff;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+#next-btn:hover:not(:disabled) {
+  background: #e9ecef;
+  border-color: #6c757d;
+}
+
+#next-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#step-label {
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+#tree-svg {
+  display: block;
+  overflow: visible;
+}
+
+/* Tree node groups */
+.tree-node {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.tree-node circle {
+  fill: #fff;
+  stroke: #495057;
+  stroke-width: 1.5;
+}
+
+.tree-node text {
+  fill: #212529;
+  font-size: 11px;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Tree edges */
+.tree-edge {
+  stroke: #adb5bd;
+  stroke-width: 1.5;
+}
