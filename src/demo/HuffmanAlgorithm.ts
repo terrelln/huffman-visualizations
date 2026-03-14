@@ -8,51 +8,65 @@ export interface SymbolInput {
 
 export interface HuffmanSnapshot {
   tree: Tree;
-  stepLabel: string;    // e.g. "Step 2 of 4"
-  description: string;  // e.g. "Merge d:1 + e:1 → de:2"
+  stepLabel: string;       // e.g. "Step 2 of 5"
+  description: string;     // e.g. "Merge d:1 + e:1 → de:2"
   isComplete: boolean;
+  mergingIds?: [string, string]; // IDs of the two nodes merged to produce this step
 }
 
 interface QueueItem {
   nodeId: string;
   freq: number;
-  depth: number;       // height of the subtree rooted here
-  insertOrder: number; // stable tiebreaker
 }
 
+// Double-queue Huffman algorithm:
+//   Q1 holds the initial leaf nodes sorted by frequency (consumed front-to-back).
+//   Q2 holds merged trees in creation order (always appended, consumed front-to-back).
+// Each step dequeues the two items with the lowest frequency from the fronts of Q1/Q2,
+// merges them, and enqueues the result onto Q2. Because merges produce non-decreasing
+// frequencies, Q2 stays sorted, so a simple two-pointer minimum suffices.
 export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] {
   const allNodes = new Map<string, TreeNode>();
-  let insertOrder = 0;
 
-  // Sort inputs by freq ascending so the initial display is already in queue order
+  for (const { symbol, freq } of inputs) {
+    allNodes.set(symbol, { id: symbol, label: `${symbol}:${freq}` });
+  }
+
   const sorted = [...inputs].sort((a, b) => a.freq - b.freq || a.symbol.localeCompare(b.symbol));
 
-  let queue: QueueItem[] = sorted.map(({ symbol, freq }) => {
-    allNodes.set(symbol, { id: symbol, label: `${symbol}:${freq}` });
-    return { nodeId: symbol, freq, depth: 0, insertOrder: insertOrder++ };
-  });
+  let q1: QueueItem[] = sorted.map(({ symbol, freq }) => ({ nodeId: symbol, freq }));
+  let q2: QueueItem[] = [];
 
   const totalMerges = inputs.length - 1;
+  const totalSteps = totalMerges + 1; // +1 for the sort step
   const snapshots: HuffmanSnapshot[] = [];
   let internalCounter = 0;
 
+  // Step 0: symbols in the order the user entered them
   snapshots.push({
-    tree: forestTree(queue, allNodes),
-    stepLabel: `Step 0 of ${totalMerges}`,
-    description: sorted.map(i => `${i.symbol}:${i.freq}`).join(', '),
+    tree: makeTree(inputs.map(i => i.symbol), [...allNodes.values()]),
+    stepLabel: `Step 0 of ${totalSteps}`,
+    description: inputs.map(i => `${i.symbol}:${i.freq}`).join(', '),
     isComplete: false,
   });
 
-  let mergeCount = 0;
+  // Step 1: symbols sorted by frequency (nodes slide to their sorted positions)
+  snapshots.push({
+    tree: forestTree([...q1], allNodes),
+    stepLabel: `Step 1 of ${totalSteps}`,
+    description: `Sort by frequency: ${sorted.map(i => `${i.symbol}:${i.freq}`).join(', ')}`,
+    isComplete: false,
+    // No mergingIds — this is a reorder, not a merge
+  });
 
-  while (queue.length > 1) {
-    queue.sort((a, b) => a.freq - b.freq || a.insertOrder - b.insertOrder);
+  let mergeCount = 1;
 
-    // Shallower tree on the left, deeper tree on the right
-    const [a, b] = [queue[0], queue[1]];
-    const left  = a.depth <= b.depth ? a : b;
-    const right = a.depth <= b.depth ? b : a;
-    queue = queue.slice(2);
+  while (q1.length + q2.length > 1) {
+    const a = dequeueMin(q1, q2);
+    const b = dequeueMin(q1, q2);
+
+    const left  = a;
+    const right = b;
 
     const newFreq = left.freq + right.freq;
     const newId = `_${++internalCounter}`;
@@ -64,31 +78,40 @@ export function buildHuffmanSnapshots(inputs: SymbolInput[]): HuffmanSnapshot[] 
       rightId: right.nodeId,
     });
 
-    const newDepth = Math.max(left.depth, right.depth) + 1;
-    queue.push({ nodeId: newId, freq: newFreq, depth: newDepth, insertOrder: insertOrder++ });
+    const merged: QueueItem = { nodeId: newId, freq: newFreq };
+    q2.push(merged);
     mergeCount++;
 
-    const leftLeaves = subtreeLeaves(left.nodeId, allNodes);
+    const leftLeaves  = subtreeLeaves(left.nodeId,  allNodes);
     const rightLeaves = subtreeLeaves(right.nodeId, allNodes);
     const desc =
       `Merge ${leftLeaves}:${left.freq} + ${rightLeaves}:${right.freq}` +
       ` → ${leftLeaves}${rightLeaves}:${newFreq}`;
 
     snapshots.push({
-      tree: forestTree(queue, allNodes),
-      stepLabel: `Step ${mergeCount} of ${totalMerges}`,
+      tree: forestTree([...q1, ...q2], allNodes),
+      stepLabel: `Step ${mergeCount} of ${totalSteps}`,
       description: desc,
-      isComplete: queue.length === 1,
+      isComplete: q1.length + q2.length === 1,
+      mergingIds: [left.nodeId, right.nodeId],
     });
   }
 
   return snapshots;
 }
 
+// Return and remove the front item with the lower frequency from q1 or q2.
+// Ties go to q1 (prefer unmerged leaves to keep the tree balanced).
+function dequeueMin(q1: QueueItem[], q2: QueueItem[]): QueueItem {
+  const useQ1 =
+    q1.length > 0 && (q2.length === 0 || q1[0].freq <= q2[0].freq);
+  return useQ1 ? q1.shift()! : q2.shift()!;
+}
+
 function subtreeLeaves(nodeId: string, allNodes: Map<string, TreeNode>): string {
   const node = allNodes.get(nodeId)!;
-  if (!node.leftId && !node.rightId) return node.id; // leaf — id is the symbol
-  const l = node.leftId ? subtreeLeaves(node.leftId, allNodes) : '';
+  if (!node.leftId && !node.rightId) return node.id;
+  const l = node.leftId  ? subtreeLeaves(node.leftId,  allNodes) : '';
   const r = node.rightId ? subtreeLeaves(node.rightId, allNodes) : '';
   return l + r;
 }
@@ -100,7 +123,7 @@ function forestTree(queue: QueueItem[], allNodes: Map<string, TreeNode>): Tree {
     if (reachable.has(nodeId)) return;
     reachable.add(nodeId);
     const node = allNodes.get(nodeId);
-    if (node?.leftId) collect(node.leftId);
+    if (node?.leftId)  collect(node.leftId);
     if (node?.rightId) collect(node.rightId);
   }
 

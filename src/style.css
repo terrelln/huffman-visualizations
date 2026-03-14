@@ -180,6 +180,12 @@ button:disabled {
   fill: #fff;
   stroke: #495057;
   stroke-width: 1.5;
+  transition: fill 0.2s ease, stroke 0.2s ease;
+}
+
+.tree-node.merging circle {
+  fill: #ffe066;
+  stroke: #c98a00;
 }
 
 .tree-node text {

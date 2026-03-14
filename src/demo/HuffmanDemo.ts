@@ -1,4 +1,6 @@
 import { TreeRenderer } from '../tree/TreeRenderer';
+
+const delay = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 import { buildHuffmanSnapshots } from './HuffmanAlgorithm';
 import type { SymbolInput, HuffmanSnapshot } from './HuffmanAlgorithm';
 
@@ -179,12 +181,12 @@ export class HuffmanDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '← Prev';
-    this.prevBtn.addEventListener('click', () => this.showStep(this.currentStep - 1));
+    this.prevBtn.addEventListener('click', () => { void this.showStep(this.currentStep - 1); });
 
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-primary';
     this.nextBtn.textContent = 'Next →';
-    this.nextBtn.addEventListener('click', () => this.showStep(this.currentStep + 1));
+    this.nextBtn.addEventListener('click', () => { void this.showStep(this.currentStep + 1); });
 
     controls.appendChild(resetBtn);
     controls.appendChild(this.prevBtn);
@@ -197,17 +199,37 @@ export class HuffmanDemo {
     this.showStep(0);
   }
 
-  private showStep(index: number): void {
+  private async showStep(index: number): Promise<void> {
+    const prevStep = this.currentStep;
     this.currentStep = Math.max(0, Math.min(index, this.snapshots.length - 1));
     const snap = this.snapshots[this.currentStep];
 
     this.stepLabel.textContent = snap.stepLabel;
     this.stepDesc.textContent = snap.description;
 
+    // Disable navigation during animation
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    // Forward: highlight nodes about to be merged.
+    // Backward: highlight the nodes that were merged (now children in current tree).
+    const highlightIds =
+      index > prevStep ? snap.mergingIds :
+      index < prevStep ? this.snapshots[prevStep].mergingIds :
+      undefined;
+
+    if (highlightIds) {
+      this.renderer.setHighlight(highlightIds, true);
+      await delay(200);
+      this.renderer.update(snap.tree);
+      await delay(this.renderer.transitionDuration);
+      this.renderer.setHighlight(highlightIds, false);
+    } else {
+      this.renderer.update(snap.tree);
+    }
+
     this.prevBtn.disabled = this.currentStep === 0;
     this.nextBtn.disabled = snap.isComplete;
     this.nextBtn.textContent = snap.isComplete ? 'Done ✓' : 'Next →';
-
-    this.renderer.update(snap.tree);
   }
 }

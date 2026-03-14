@@ -10,7 +10,7 @@ interface RendererOptions {
 export class TreeRenderer {
   private svgEl: SVGSVGElement;
   private nodeRadius: number;
-  private transitionDuration: number;
+  readonly transitionDuration: number;
 
   private edgesGroup: SVGGElement;
   private nodesGroup: SVGGElement;
@@ -30,6 +30,12 @@ export class TreeRenderer {
 
     this.svgEl.appendChild(this.edgesGroup);
     this.svgEl.appendChild(this.nodesGroup);
+  }
+
+  setHighlight(ids: string[], on: boolean): void {
+    for (const id of ids) {
+      this.nodeGroupMap.get(id)?.classList.toggle('merging', on);
+    }
   }
 
   update(tree: Tree): void {
