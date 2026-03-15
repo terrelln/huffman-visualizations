@@ -97,3 +97,9 @@ el.classList.toggle('active-last',  !next?.classList.contains('active'));
 ### CSS
 
 All styling is in `src/style.css`. Color scheme: neutral grays with accent blue (`#0d6efd`) and yellow (`#f59f00`). State classes like `.comparing`, `.merging`, `.active`, `.active-first`, `.active-last` drive visual feedback.
+
+**CSS specificity pitfall:** When reusing a state class (e.g. `.canon-row-active`) on elements styled by a different component's base class (e.g. `.depth-row`), the base class can silently override the state class if it sets the same property and appears later in the stylesheet. Always add a compound selector (e.g. `.depth-row.canon-row-active`) to ensure the state wins. After adding any visual state class, verify it actually has a visible effect — don't assume it works just because the JS is correct.
+
+### Flying Animations
+
+When animating a label to a target, fly it to the specific child element it relates to, not to the center of a parent container. For example, if a container displays both `W_C` and `W_T`, fly the `W_C` update to a `<span>` wrapping the `W_C` line, not to the container's center. Wrap target regions in elements with classes so they can be individually targeted.
