@@ -1,6 +1,7 @@
 import { HuffmanDemo } from './demos/01-huffman-tree-construction/HuffmanDemo';
 import { HuffmanEncodingDemo } from './demos/02-naive-huffman-encoding/HuffmanEncodingDemo';
 import { HuffmanDecodingDemo } from './demos/03-naive-huffman-decoding/HuffmanDecodingDemo';
+import { CanonicalizationDemo } from './demos/04-huffman-canonicalization/CanonicalizationDemo';
 import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAlgorithm';
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
@@ -15,6 +16,7 @@ const DEMO_TITLES = [
   'Tree Construction',
   'Naive Huffman Encoding',
   'Naive Huffman Decoding',
+  'Huffman Canonicalization',
 ];
 
 interface IDemo {
@@ -84,10 +86,12 @@ export class DemoPlayer {
     const slide1 = this.addSlide();
     const slide2 = this.addSlide();
     const slide3 = this.addSlide();
+    const slide4 = this.addSlide();
 
     this.demos.push(new HuffmanDemo(slide1));
     this.demos.push(new HuffmanEncodingDemo(slide2));
     this.demos.push(new HuffmanDecodingDemo(slide3));
+    this.demos.push(new CanonicalizationDemo(slide4));
 
     this.updateNavUI();
     void this.loadWordList();

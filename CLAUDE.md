@@ -42,9 +42,57 @@ No test or lint commands exist.
 
 All timed animations use a `scaledDelay(ms, getSpeedMultiplier)` pattern. The speed multiplier (0.2×–4×) comes from a callback so it can be changed mid-playback. Steps are snapshot-driven: the algorithm runs to completion first, then the UI replays the recorded steps.
 
-### Pseudocode Coloring
+### Pseudocode Style Guide
 
-`HuffmanDemo` uses short utility functions (`K`, `F`, `O`, `C`) to emit syntax-colored HTML spans for keywords, function names, operators, and comments in the pseudocode panel.
+Pseudocode panels use Python-inspired syntax rendered as HTML. Each line is a `{ id, indent, html }` entry in a `PSEUDO_LINES` array. The `html` field is built with four coloring helpers:
+
+| Helper | CSS class | Used for |
+|--------|-----------|----------|
+| `K(s)` | `.pk` (blue) | Keywords: `def`, `for`, `in`, `while`, `if`, `else`, `return`, `not` |
+| `F(s)` | `.pf` (green) | Function/method names: `sort`, `dequeue_min`, `binary`, etc. |
+| `O(s)` | `.po` (orange) | Operators and symbols: `=`, `+`, `-`, `≤`, `>`, `\|`, `λ`, `++`, `<<=` |
+| `C(s)` | `.pc` (gray) | Comments, introduced with `▷` |
+
+**Syntax conventions:**
+- Function definitions: `` `${K('def')} ${F('name')}(params):` ``
+- Assignment / equality: wrap `=` with `O`: `` `x ${O('=')} value` ``
+- Comparisons: use Unicode via `O`: `O('≤')`, `O('>')`, `O('=')` (equality in conditions)
+- Increment: **prefix** style only — `` `${O('++')}code` `` not `code++`
+- Lambda / sort key: `` `${F('sort')}(xs, key ${O('=')} ${O('λ')} x: ...)` ``
+- Absolute value / length bars: each `|` wrapped separately — `` `${O('|')}Q${O('|')}` ``
+- Math subscripts: use HTML — `Q<sub>L</sub>`, `Q<sub>T</sub>`
+- Comments: `` `${C('▷ note here')}` `` appended at end of line
+- Blank separator lines between functions: `{ id: '', indent: 0, html: '' }`
+
+**Indentation levels** (each level = 1.5 em):
+- `0` — function definition (`def`)
+- `1` — top-level body statements
+- `2` — first-level nested block (loop/if body)
+- `3` — second-level nested block
+
+**Highlighting groups of lines:**
+
+Multiple lines can be highlighted simultaneously by passing an array of IDs to `setPseudoHighlight`. Consecutive active lines must render as **one merged highlight block** with a single gold left-bar, not as separate pills. This is achieved with `active-first` / `active-last` CSS classes:
+
+- `active-first` — applied to the first active line in a run (rounds top corners)
+- `active-last` — applied to the last active line in a run (rounds bottom corners)
+- A line that is the only active line gets both classes (fully rounded pill)
+
+**Critical:** determine `active-first` / `active-last` by checking the target `active` Set, **not** by reading `.classList.contains('active')` on adjacent DOM elements. Reading DOM class state mid-iteration gives stale results from the previous highlight call, causing the first line of a group to incorrectly receive both classes and appear as its own separate pill:
+
+```typescript
+// Correct — check the set being applied
+el.classList.toggle('active-first', !active.has(prevId));
+el.classList.toggle('active-last',  !active.has(nextId));
+
+// Wrong — reads stale DOM state from previous setPseudoHighlight call
+el.classList.toggle('active-first', !prev?.classList.contains('active'));
+el.classList.toggle('active-last',  !next?.classList.contains('active'));
+```
+
+**What to avoid:**
+- Don't add guards (`if not last row:`, `if x > 0:`) around code that is a safe no-op without them — keep pseudocode minimal and honest.
+- Don't use postfix `++` (`code++`); always use prefix (`++code`).
 
 ### CSS
 

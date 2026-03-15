@@ -33,7 +33,7 @@ export function computeLayout(tree: Tree): Layout {
   const depthMap = new Map<string, number>();
 
   function assignDepths(nodeId: string | undefined, depth: number): void {
-    if (!nodeId) return;
+    if (nodeId == null) return;
     const node = tree.nodes.get(nodeId);
     if (!node) return;
     depthMap.set(nodeId, depth);

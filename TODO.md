@@ -11,3 +11,8 @@
 
 * There is a dead state when pressing prev, when going back from the beginning of a symbol to the end of the previous.
 * All animations auto-play, not just the one currently on screen. Animations off screen should not auto play.
+
+
+# Huffman Canonicalization
+
+* The root node moves as the reconstruction progresses. Maybe not an issue.

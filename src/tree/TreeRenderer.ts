@@ -294,6 +294,10 @@ export class TreeRenderer {
     this.highlightedEdges.clear();
   }
 
+  getNodePos(id: string): { x: number; y: number } | null {
+    return this.parseXY(id);
+  }
+
   getEdgeLabelPos(parentId: string, childId: string): { x: number; y: number } | null {
     const key = `${parentId}->${childId}`;
     const lbl = this.edgeLabelMap.get(key);

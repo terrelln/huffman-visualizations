@@ -800,6 +800,165 @@ button:disabled {
   border: 1px solid #0d6efd;
 }
 
+/* ── Canonicalization panel ─────────────────────────────────────────────── */
+
+.canon-panel {
+  flex-shrink: 0;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.canon-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6c757d;
+}
+
+.canon-pseudo {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.canon-pseudo-body {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  line-height: 1.75;
+}
+
+.canon-pseudo-line {
+  border-left: 3px solid transparent;
+  padding: 0 4px;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.canon-pseudo-line[data-indent="1"] { padding-left: 1.5em; }
+.canon-pseudo-line[data-indent="2"] { padding-left: 3em; }
+.canon-pseudo-line[data-indent="3"] { padding-left: 4.5em; }
+.canon-pseudo-line[data-indent="4"] { padding-left: 6em; }
+
+.canon-pseudo-line.active {
+  background: #fff3cd;
+  border-left-color: #f59f00;
+  border-radius: 0;
+}
+
+.canon-pseudo-line.active-first {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+.canon-pseudo-line.active-last {
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.canon-code-display {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: #212529;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.canon-table-wrap {
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.canon-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.canon-table thead th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  padding: 6px 10px;
+  border-bottom: 1px solid #dee2e6;
+  text-align: left;
+}
+
+.canon-row {
+  transition: background 0.15s;
+}
+
+.canon-row td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.canon-row:last-child td {
+  border-bottom: none;
+}
+
+.canon-row-active {
+  background: #fff3cd;
+}
+
+.canon-cell-sym {
+  font-weight: 700;
+  color: #212529;
+}
+
+.canon-cell-bits {
+  color: #495057;
+  text-align: center;
+}
+
+.canon-cell-cw {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: #212529;
+}
+
+.canon-cw-text {
+  transition: opacity 0.3s;
+}
+
+/* Floaters */
+.canon-row-floater,
+.canon-symbol-floater,
+.canon-bit-floater {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.canon-row-floater {
+  background: #fff3cd;
+  color: #7a5200;
+  border: 1px solid #c98a00;
+}
+
+.canon-symbol-floater {
+  background: #fff3cd;
+  color: #7a5200;
+  border: 1px solid #c98a00;
+}
+
+.canon-bit-floater {
+  background: #cfe2ff;
+  color: #052c65;
+  border: 1px solid #0d6efd;
+}
+
 /* ── Sum animation label ─────────────────────────────────────────────────── */
 
 .sum-label-bg {
