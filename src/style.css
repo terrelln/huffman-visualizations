@@ -72,54 +72,71 @@ button:disabled {
   cursor: default;
 }
 
-/* ── Input phase ────────────────────────────────────────────────────────── */
+/* ── Input strip ────────────────────────────────────────────────────────── */
 
-.phase-input {
+.input-strip {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 400px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
-.symbol-rows {
+.symbol-chips {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.symbol-row {
-  display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
 }
 
-.sym-input {
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 6px 10px;
+.sym-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   border: 1px solid #ced4da;
   border-radius: 6px;
-  width: 120px;
+  padding: 2px 2px 2px 6px;
+  background: #fff;
 }
 
-.freq-input {
+.chip-sym {
   font-family: inherit;
-  font-size: 0.9rem;
-  padding: 6px 10px;
-  border: 1px solid #ced4da;
-  border-radius: 6px;
-  width: 80px;
+  font-size: 0.875rem;
+  width: 44px;
+  border: none;
+  background: transparent;
+  padding: 2px 2px;
+  color: #212529;
+  min-width: 0;
 }
 
-.sym-input:focus,
-.freq-input:focus {
-  outline: 2px solid #212529;
-  outline-offset: 1px;
+.chip-sep {
+  color: #adb5bd;
+  font-size: 0.8rem;
+  user-select: none;
+}
+
+.chip-freq {
+  font-family: inherit;
+  font-size: 0.875rem;
+  width: 40px;
+  border: none;
+  background: transparent;
+  padding: 2px 2px;
+  color: #212529;
+  min-width: 0;
+}
+
+.chip-sym:focus,
+.chip-freq:focus {
+  outline: none;
+  background: #f1f3f5;
+  border-radius: 3px;
 }
 
 .remove-btn {
-  padding: 4px 9px;
-  font-size: 1rem;
+  padding: 2px 6px;
+  font-size: 0.9rem;
   background: transparent;
   color: #adb5bd;
   border-color: transparent;
@@ -131,14 +148,7 @@ button:disabled {
   border-color: transparent;
 }
 
-.input-actions {
-  display: flex;
-  gap: 10px;
-  padding-top: 4px;
-}
-
 .input-error {
-  margin: 0;
   color: #dc3545;
   font-size: 0.875rem;
 }

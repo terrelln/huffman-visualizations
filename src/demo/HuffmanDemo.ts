@@ -90,7 +90,8 @@ interface Action {
 // ── Demo class ───────────────────────────────────────────────────────────────
 
 export class HuffmanDemo {
-  private container: HTMLElement;
+  private inputEl: HTMLElement;
+  private controlsEl: HTMLElement;
   private svgEl: SVGSVGElement;
   private pseudoEl: HTMLElement;
   private renderer: TreeRenderer;
@@ -124,15 +125,16 @@ export class HuffmanDemo {
   private playBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
 
-  constructor(container: HTMLElement, svgEl: SVGSVGElement, pseudoEl: HTMLElement) {
-    this.container = container;
+  constructor(inputEl: HTMLElement, controlsEl: HTMLElement, svgEl: SVGSVGElement, pseudoEl: HTMLElement) {
+    this.inputEl = inputEl;
+    this.controlsEl = controlsEl;
     this.svgEl = svgEl;
     this.pseudoEl = pseudoEl;
     this.renderer = new TreeRenderer({ svgEl });
     this.svgEl.style.display = 'none';
     this.buildPseudocodePanel();
     this.pseudoEl.style.display = 'none';
-    this.buildInputPhase();
+    this.buildInputStrip();
   }
 
   // ── Pseudocode panel ────────────────────────────────────────────────────────
@@ -431,40 +433,38 @@ export class HuffmanDemo {
     return actions;
   }
 
-  // ── Input phase ─────────────────────────────────────────────────────────────
+  // ── Input strip (persistent) ─────────────────────────────────────────────────
 
-  private buildInputPhase(): void {
-    this.container.innerHTML = '';
-    this.svgEl.style.display = 'none';
-    this.pseudoEl.style.display = 'none';
+  private buildInputStrip(): void {
+    this.inputEl.innerHTML = '';
 
-    const phase = document.createElement('div');
-    phase.className = 'phase-input';
+    const strip = document.createElement('div');
+    strip.className = 'input-strip';
 
-    const rowsContainer = document.createElement('div');
-    rowsContainer.className = 'symbol-rows';
+    const chips = document.createElement('div');
+    chips.className = 'symbol-chips';
     for (const { symbol, freq } of DEFAULT_SYMBOLS) {
-      rowsContainer.appendChild(this.createSymbolRow(symbol, freq, rowsContainer));
+      chips.appendChild(this.createSymbolChip(symbol, freq, chips));
     }
 
-    const errorEl = document.createElement('p');
+    const errorEl = document.createElement('span');
     errorEl.className = 'input-error';
     errorEl.hidden = true;
 
     const addBtn = document.createElement('button');
     addBtn.className = 'btn-secondary';
-    addBtn.textContent = '+ Add symbol';
+    addBtn.textContent = '+ Add';
     addBtn.addEventListener('click', () => {
-      const row = this.createSymbolRow('', 1, rowsContainer);
-      rowsContainer.appendChild(row);
-      (row.querySelector('.sym-input') as HTMLInputElement).focus();
+      const chip = this.createSymbolChip('', 0, chips);
+      chips.appendChild(chip);
+      (chip.querySelector('.chip-sym') as HTMLInputElement).focus();
     });
 
     const startBtn = document.createElement('button');
     startBtn.className = 'btn-primary';
     startBtn.textContent = 'Visualize →';
     startBtn.addEventListener('click', () => {
-      const inputs = this.readSymbolRows(rowsContainer);
+      const inputs = this.readSymbolChips(chips);
       const error = this.validateInputs(inputs);
       if (error) {
         errorEl.textContent = error;
@@ -475,32 +475,32 @@ export class HuffmanDemo {
       this.startVisualization(inputs);
     });
 
-    const actions = document.createElement('div');
-    actions.className = 'input-actions';
-    actions.appendChild(addBtn);
-    actions.appendChild(startBtn);
-
-    phase.appendChild(rowsContainer);
-    phase.appendChild(actions);
-    phase.appendChild(errorEl);
-    this.container.appendChild(phase);
+    strip.appendChild(chips);
+    strip.appendChild(addBtn);
+    strip.appendChild(startBtn);
+    strip.appendChild(errorEl);
+    this.inputEl.appendChild(strip);
   }
 
-  private createSymbolRow(symbol: string, freq: number, container: HTMLElement): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'symbol-row';
+  private createSymbolChip(symbol: string, freq: number, container: HTMLElement): HTMLElement {
+    const chip = document.createElement('span');
+    chip.className = 'sym-chip';
 
     const symInput = document.createElement('input');
     symInput.type = 'text';
-    symInput.className = 'sym-input';
-    symInput.placeholder = 'Symbol';
+    symInput.className = 'chip-sym';
+    symInput.placeholder = 'sym';
     symInput.value = symbol;
     symInput.maxLength = 10;
 
+    const sep = document.createElement('span');
+    sep.className = 'chip-sep';
+    sep.textContent = ':';
+
     const freqInput = document.createElement('input');
     freqInput.type = 'number';
-    freqInput.className = 'freq-input';
-    freqInput.placeholder = 'Count';
+    freqInput.className = 'chip-freq';
+    freqInput.placeholder = '1';
     freqInput.value = freq > 0 ? String(freq) : '';
     freqInput.min = '1';
 
@@ -508,21 +508,22 @@ export class HuffmanDemo {
     removeBtn.type = 'button';
     removeBtn.className = 'remove-btn';
     removeBtn.textContent = '×';
-    removeBtn.setAttribute('aria-label', 'Remove row');
+    removeBtn.setAttribute('aria-label', 'Remove');
     removeBtn.addEventListener('click', () => {
-      if (container.querySelectorAll('.symbol-row').length > 1) row.remove();
+      if (container.querySelectorAll('.sym-chip').length > 1) chip.remove();
     });
 
-    row.appendChild(symInput);
-    row.appendChild(freqInput);
-    row.appendChild(removeBtn);
-    return row;
+    chip.appendChild(symInput);
+    chip.appendChild(sep);
+    chip.appendChild(freqInput);
+    chip.appendChild(removeBtn);
+    return chip;
   }
 
-  private readSymbolRows(container: HTMLElement): SymbolInput[] {
-    return Array.from(container.querySelectorAll('.symbol-row')).map(row => ({
-      symbol: (row.querySelector('.sym-input') as HTMLInputElement).value.trim(),
-      freq: parseInt((row.querySelector('.freq-input') as HTMLInputElement).value, 10),
+  private readSymbolChips(container: HTMLElement): SymbolInput[] {
+    return Array.from(container.querySelectorAll('.sym-chip')).map(chip => ({
+      symbol: (chip.querySelector('.chip-sym') as HTMLInputElement).value.trim(),
+      freq: parseInt((chip.querySelector('.chip-freq') as HTMLInputElement).value, 10),
     }));
   }
 
@@ -545,8 +546,9 @@ export class HuffmanDemo {
     this.currentStep = 0;
     this.remainingActions = [];
     this.completedActions = [];
+    this.isPlaying = true;
 
-    this.container.innerHTML = '';
+    this.controlsEl.innerHTML = '';
     while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
     this.renderer = new TreeRenderer({
       svgEl: this.svgEl,
@@ -561,11 +563,6 @@ export class HuffmanDemo {
 
     const controls = document.createElement('div');
     controls.className = 'viz-controls';
-
-    const resetBtn = document.createElement('button');
-    resetBtn.className = 'btn-secondary';
-    resetBtn.textContent = '← Reset';
-    resetBtn.addEventListener('click', () => this.buildInputPhase());
 
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
@@ -582,7 +579,6 @@ export class HuffmanDemo {
     this.nextBtn.textContent = 'Next →';
     this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
 
-    controls.appendChild(resetBtn);
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);
     controls.appendChild(this.nextBtn);
@@ -610,7 +606,7 @@ export class HuffmanDemo {
 
     phase.appendChild(controls);
     phase.appendChild(speedRow);
-    this.container.appendChild(phase);
+    this.controlsEl.appendChild(phase);
 
     void this.goToStep(0, /*forward=*/false).then(() => {
       if (this.isPlaying) void this.playLoop();
