@@ -2,8 +2,9 @@ import { TreeRenderer } from '../../tree/TreeRenderer';
 import {
   buildCanonSteps,
   buildCanonicalTree,
+  buildCanonicalTreePartial,
 } from './CanonicalizationAlgorithm';
-import type { CanonRow, CanonStep } from './CanonicalizationAlgorithm';
+import type { CanonRow, CanonStep, BuildTreeStep } from './CanonicalizationAlgorithm';
 import type { SymbolInput } from '../01-huffman-tree-construction/HuffmanAlgorithm';
 import type { Tree } from '../../tree/BinaryTree';
 
@@ -22,10 +23,10 @@ const PSEUDO_LINES = [
   { id: 'fn-canon',    indent: 0, html: `${K('def')} ${F('canonicalize')}(table):` },
   { id: 'sort-line',   indent: 1, html: `${F('sort')}(table, key ${O('=')} ${O('λ')} r: (r.bits, r.symbol))` },
   { id: 'code-init',   indent: 1, html: `code ${O('=')} 0` },
-  { id: 'for-loop',    indent: 1, html: `${K('for')} row ${K('in')} table:` },
-  { id: 'assign-cw',   indent: 2, html: `row.codeword ${O('=')} ${F('binary')}(code, row.bits)` },
+  { id: 'for-loop',    indent: 1, html: `${K('for')} i, row ${K('in')} ${F('enumerate')}(table):` },
+  { id: 'assign-cw',   indent: 2, html: `row.codeword ${O('=')} code` },
   { id: 'inc-code',    indent: 2, html: `${O('++')}code` },
-  { id: 'do-shift',    indent: 2, html: `code ${O('<<=')} next.bits ${O('-')} row.bits` },
+  { id: 'do-shift',    indent: 2, html: `code ${O('<<=')} table[i${O('+')}1].bits ${O('-')} row.bits` },
   { id: 'return-line', indent: 1, html: `${K('return')} table` },
 ];
 
@@ -199,6 +200,25 @@ export class CanonicalizationDemo {
     });
   }
 
+  // ── Path traversal helper ──────────────────────────────────────────────
+
+  private getPathByCodeword(
+    codeword: string,
+  ): Array<{ parentId: string; childId: string; bit: string }> {
+    const result: Array<{ parentId: string; childId: string; bit: string }> = [];
+    if (!codeword || this.huffmanTree.rootIds.length === 0) return result;
+    let nodeId = this.huffmanTree.rootIds[0];
+    for (const bit of codeword) {
+      const node = this.huffmanTree.nodes.get(nodeId);
+      if (!node) break;
+      const childId = bit === '0' ? node.leftId : node.rightId;
+      if (!childId) break;
+      result.push({ parentId: nodeId, childId, bit });
+      nodeId = childId;
+    }
+    return result;
+  }
+
   // ── SVG → viewport conversion ──────────────────────────────────────────
 
   private svgToViewport(x: number, y: number): { x: number; y: number } {
@@ -358,7 +378,7 @@ export class CanonicalizationDemo {
       cwCell.className = 'canon-cell-cw';
       const cwSpan = document.createElement('span');
       cwSpan.className = 'canon-cw-text';
-      cwSpan.textContent = row.naiveCodeword;
+      cwSpan.textContent = '';
       cwCell.appendChild(cwSpan);
 
       rowEl.appendChild(symCell);
@@ -390,8 +410,15 @@ export class CanonicalizationDemo {
   ): Action[] {
     const actions: Action[] = [];
 
-    // We need to track a "current code value" as a display string for the
-    // assign steps. We'll pre-compute the code display state for each assign step.
+    // Pre-index build-tree steps by sourceRowIndex for inline interleaving with assign steps
+    const buildTreeByRow = new Map<number, BuildTreeStep>();
+    for (const step of steps) {
+      if (step.kind === 'build-tree') {
+        buildTreeByRow.set(step.sourceRowIndex, step);
+      }
+    }
+
+    // Pre-compute the code display string for each assign step (value before that row's assignment)
     const codeDisplayStates: string[] = [];
     let code = 0;
     for (const step of steps) {
@@ -406,11 +433,7 @@ export class CanonicalizationDemo {
       }
     }
 
-    // Track sorted positions of table row elements (in tableRowEls index space)
-    // tableRowEls[i] corresponds to extractionRows[i]
-    // After sort, we need to find which tableRowEl corresponds to each sorted row.
     let assignIdx = 0;
-    let buildTreeCount = 0;
 
     for (const step of steps) {
       if (step.kind === 'extract') {
@@ -419,34 +442,128 @@ export class CanonicalizationDemo {
           forward: async () => {
             const gen = this.generation;
             this.renderer.setHighlight([s.leafId], true);
-            // Fly from leaf position to table row
             const rowEl = this.tableRowEls[s.rowIndex];
+            const cwCell = rowEl.querySelector<HTMLElement>('.canon-cell-cw') ?? rowEl;
+            const cwSpan = cwCell.querySelector<HTMLElement>('.canon-cw-text') ?? cwCell;
+
+            // Fly symbol from leaf to table row first
             const nodePos = this.renderer.getNodePos(s.leafId);
             if (nodePos) {
               const vp = this.svgToViewport(nodePos.x, nodePos.y);
-              await this.flyToRow(vp.x, vp.y, rowEl, extractionRows[s.rowIndex].symbol, 'canon-row-floater', BASE_FLY_MS * 1.8);
+              await this.flyToRow(vp.x, vp.y, rowEl, extractionRows[s.rowIndex].symbol, 'canon-row-floater');
             }
             if (this.generation !== gen) return;
             rowEl.style.transition = 'opacity 0.3s';
             rowEl.style.opacity = '1';
+
+            // Traverse root→leaf: highlight each edge and fly its bit to the codeword cell
+            const codeword = extractionRows[s.rowIndex].naiveCodeword;
+            const path = this.getPathByCodeword(codeword);
+            for (const { parentId, childId, bit } of path) {
+              this.renderer.setEdgeHighlight(parentId, childId, true);
+              const edgeLabelPos = this.renderer.getEdgeLabelPos(parentId, childId);
+              if (edgeLabelPos) {
+                const edgeVp = this.svgToViewport(edgeLabelPos.x, edgeLabelPos.y);
+                const cwRect = cwCell.getBoundingClientRect();
+                await this.fly(edgeVp.x, edgeVp.y, cwRect.left + cwRect.width / 2, cwRect.top + cwRect.height / 2, bit, 'canon-bit-floater');
+              }
+              if (this.generation !== gen) return;
+              cwSpan.textContent += bit;
+            }
+
+            this.renderer.clearEdgeHighlights();
             this.renderer.setHighlight([s.leafId], false);
-            await this.scaledDelay(BASE_STEP_MS * 0.6);
+            await this.scaledDelay(BASE_STEP_MS * 0.5);
           },
           backward: async () => {
             const rowEl = this.tableRowEls[s.rowIndex];
+            const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
+            if (cwSpan) cwSpan.textContent = '';
             rowEl.style.transition = '';
             rowEl.style.opacity = '0';
+            this.renderer.clearEdgeHighlights();
             this.renderer.setHighlight([s.leafId], false);
           },
         });
 
       } else if (step.kind === 'sort') {
         const s = step;
-        // permutation[i] = extraction index for sorted position i
-        // We need to animate table rows moving to their new positions.
+
+        // Erase naive codewords — only lengths matter for canonicalization
         actions.push({
           forward: async () => {
-            this.setPseudoHighlight(['fn-canon', 'sort-line']);
+            for (const rowEl of this.tableRowEls) {
+              const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
+              if (cwSpan) {
+                cwSpan.style.transition = 'opacity 0.3s';
+                cwSpan.style.opacity = '0';
+              }
+            }
+            await this.scaledDelay(BASE_STEP_MS * 1.2);
+          },
+          backward: async () => {
+            for (let i = 0; i < this.tableRowEls.length; i++) {
+              const cwSpan = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cw-text');
+              if (cwSpan) {
+                cwSpan.textContent = rows[i].naiveCodeword;
+                cwSpan.style.transition = 'opacity 0.3s';
+                cwSpan.style.opacity = '1';
+              }
+            }
+            await this.scaledDelay(BASE_STEP_MS * 0.3);
+          },
+        });
+
+        // Fade out Huffman tree — done with it, canonical tree will be built from scratch
+        actions.push({
+          forward: async () => {
+            const fadeDur = Math.round(400 / this.speedMultiplier);
+            this.svgEl.style.transition = `opacity ${fadeDur}ms`;
+            this.svgEl.style.opacity = '0';
+            await this.scaledDelay(400);
+            this.svgEl.style.transition = '';
+
+            while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
+            this.renderer = new TreeRenderer({
+              svgEl: this.svgEl,
+              transitionDuration: BASE_ANIM_MS,
+              getSpeedMultiplier: () => this.speedMultiplier,
+            });
+            this.svgEl.style.opacity = '1';
+          },
+          backward: async () => {
+            this.renderer.clearEdgeHighlights();
+            const fadeDur = Math.round(400 / this.speedMultiplier);
+            this.svgEl.style.transition = `opacity ${fadeDur}ms`;
+            this.svgEl.style.opacity = '0';
+            await this.scaledDelay(400);
+            this.svgEl.style.transition = '';
+
+            while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
+            this.renderer = new TreeRenderer({
+              svgEl: this.svgEl,
+              transitionDuration: BASE_ANIM_MS,
+              getSpeedMultiplier: () => this.speedMultiplier,
+            });
+            this.renderer.update(this.huffmanTree);
+            this.svgEl.style.opacity = '1';
+          },
+        });
+
+        // "Function call" action — highlight def canonicalize(table): before entering the body
+        actions.push({
+          forward: async () => {
+            this.setPseudoHighlight(['fn-canon']);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+          },
+          backward: async () => {
+            this.clearPseudoHighlight();
+          },
+        });
+
+        actions.push({
+          forward: async () => {
+            this.setPseudoHighlight(['sort-line']);
 
             const tableBody = this.tableRowEls[0]?.parentElement as HTMLElement;
             if (!tableBody) return;
@@ -501,8 +618,7 @@ export class CanonicalizationDemo {
 
             await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-            // Row at sorted position i (extraction index permutation[i]) moves
-            // from tops[i] back to extraction slot permutation[i] (top = tops[permutation[i]])
+            // Row at sorted position i moves from tops[i] back to extraction slot tops[permutation[i]]
             const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
             for (let i = 0; i < s.permutation.length; i++) {
               const row = this.tableRowEls[i];
@@ -527,32 +643,7 @@ export class CanonicalizationDemo {
               this.tableRowEls[i] = extractionOrder[i];
             }
 
-            this.clearPseudoHighlight();
-          },
-        });
-
-        // Erase codewords action (after sort)
-        actions.push({
-          forward: async () => {
-            for (const rowEl of this.tableRowEls) {
-              const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
-              if (cwSpan) {
-                cwSpan.style.transition = 'opacity 0.3s';
-                cwSpan.style.opacity = '0';
-              }
-            }
-            await this.scaledDelay(BASE_STEP_MS * 1.2);
-          },
-          backward: async () => {
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              const cwSpan = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cw-text');
-              if (cwSpan) {
-                cwSpan.textContent = rows[i].naiveCodeword;
-                cwSpan.style.transition = 'opacity 0.3s';
-                cwSpan.style.opacity = '1';
-              }
-            }
-            await this.scaledDelay(BASE_STEP_MS * 0.3);
+            this.setPseudoHighlight(['fn-canon']);
           },
         });
 
@@ -566,9 +657,10 @@ export class CanonicalizationDemo {
           },
           backward: async () => {
             this.codeDisplayEl.style.opacity = '0';
-            this.setPseudoHighlight(['fn-canon', 'sort-line']);
+            this.setPseudoHighlight(['sort-line']);
           },
         });
+
 
       } else if (step.kind === 'assign') {
         const s = step;
@@ -576,10 +668,26 @@ export class CanonicalizationDemo {
         const codeDisplayBefore = codeDisplayStates[localAssignIdx];
         const isLast = s.rowIndex === rows.length - 1;
 
-        // Action A: highlight for-loop + assign-cw. Fill in codeword.
+        // Action ForLoop: highlight for-loop as its own step
         actions.push({
           forward: async () => {
-            this.setPseudoHighlight(['for-loop', 'assign-cw']);
+            this.setPseudoHighlight(['for-loop']);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+          },
+          backward: async () => {
+            if (s.rowIndex === 0) {
+              this.setPseudoHighlight(['code-init']);
+            } else {
+              this.setPseudoHighlight(['do-shift']);
+              this.codeDisplayEl.textContent = codeDisplayBefore;
+            }
+          },
+        });
+
+        // Action A: highlight assign-cw, fill in codeword
+        actions.push({
+          forward: async () => {
+            this.setPseudoHighlight(['assign-cw']);
             this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
             const cwSpan = this.tableRowEls[s.rowIndex].querySelector<HTMLElement>('.canon-cw-text');
             if (cwSpan) {
@@ -597,19 +705,79 @@ export class CanonicalizationDemo {
               cwSpan.innerHTML = '';
               cwSpan.style.opacity = '0';
             }
-            // Go back to code-init highlight or previous assign row active
-            if (s.rowIndex === 0) {
-              this.setPseudoHighlight(['code-init']);
-              this.codeDisplayEl.textContent = 'code = 0b0';
-            } else {
-              this.setPseudoHighlight(['for-loop', 'assign-cw']);
-              this.tableRowEls[s.rowIndex - 1].classList.add('canon-row-active');
-              this.codeDisplayEl.textContent = codeDisplayBefore;
-            }
+            this.setPseudoHighlight(['for-loop']);
           },
         });
 
-        // Action B: highlight inc-code. Update code display to code+1.
+        // Build-tree action: interleaved right after assign-cw, before inc-code
+        const bt = buildTreeByRow.get(s.rowIndex);
+        if (bt) {
+          actions.push({
+            forward: async () => {
+              const pathIds: string[] = [''];
+              for (let i = 1; i <= bt.codeword.length; i++) {
+                pathIds.push(bt.codeword.slice(0, i));
+              }
+
+              // Traverse root→leaf, revealing new nodes only when the path reaches them
+              const revealedNewPrefixes: string[] = [];
+              for (let i = 0; i < pathIds.length - 1; i++) {
+                const parentId = pathIds[i];
+                const childId  = pathIds[i + 1];
+                const bit = childId[childId.length - 1];
+                const isLeaf = i === pathIds.length - 2;
+                const isNewInternal = bt.newPrefixes.includes(childId);
+
+                if (isNewInternal) {
+                  // Reveal this internal node (and root if first step for this tree)
+                  revealedNewPrefixes.push(childId);
+                  this.renderer.update(buildCanonicalTreePartial(rows, bt.sourceRowIndex - 1, revealedNewPrefixes));
+                  await this.scaledDelay(BASE_ANIM_MS * 0.8);
+                } else if (isLeaf) {
+                  // Reveal the leaf
+                  this.renderer.update(buildCanonicalTree(rows, bt.sourceRowIndex));
+                  await this.scaledDelay(BASE_ANIM_MS * 0.8);
+                }
+
+                this.renderer.setEdgeHighlight(parentId, childId, true);
+
+                const bitEl = this.tableRowEls[bt.sourceRowIndex]
+                  .querySelector<HTMLElement>(`.canon-cw-bit[data-bit-idx="${i}"]`);
+                const edgeLabelPos = this.renderer.getEdgeLabelPos(parentId, childId);
+                if (bitEl && edgeLabelPos) {
+                  const bitRect = bitEl.getBoundingClientRect();
+                  const fromX = bitRect.left + bitRect.width / 2;
+                  const fromY = bitRect.top + bitRect.height / 2;
+                  const edgeVp = this.svgToViewport(edgeLabelPos.x, edgeLabelPos.y);
+                  await this.fly(fromX, fromY, edgeVp.x, edgeVp.y, bit, 'canon-bit-floater');
+                }
+              }
+
+              // Leaf glow + symbol flies from table row to leaf
+              this.renderer.setHighlight([bt.codeword], true);
+              const leafPos = this.renderer.getNodePos(bt.codeword);
+              if (leafPos) {
+                const rowEl = this.tableRowEls[bt.sourceRowIndex];
+                const leafVp = this.svgToViewport(leafPos.x, leafPos.y);
+                await this.flyFromRow(rowEl, leafVp.x, leafVp.y, bt.symbol, 'canon-symbol-floater');
+              }
+
+              await this.scaledDelay(BASE_STEP_MS * 0.5);
+              this.renderer.clearEdgeHighlights();
+              this.renderer.setHighlight([bt.codeword], false);
+            },
+            backward: async () => {
+              this.renderer.clearEdgeHighlights();
+              this.renderer.setHighlight([bt.codeword], false);
+              // Remove this leaf (and any internal nodes it introduced) from the tree
+              const treeBefore = buildCanonicalTree(rows, bt.sourceRowIndex - 1);
+              this.renderer.update(treeBefore);
+              await this.scaledDelay(BASE_ANIM_MS);
+            },
+          });
+        }
+
+        // Action B: highlight inc-code, update code display
         const nextNumBits = isLast ? rows[s.rowIndex].numBits : rows[s.rowIndex + 1].numBits;
         const codeAfterInc = `code = 0b${s.codeAfter.toString(2).padStart(rows[s.rowIndex].numBits, '0')}`;
 
@@ -623,11 +791,11 @@ export class CanonicalizationDemo {
           backward: async () => {
             this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
             this.codeDisplayEl.textContent = codeDisplayBefore;
-            this.setPseudoHighlight(['for-loop', 'assign-cw']);
+            this.setPseudoHighlight(['assign-cw']);
           },
         });
 
-        // Action C: highlight do-shift. No-op when bits are equal.
+        // Action C: highlight do-shift, apply shift
         const shiftedCode = s.codeAfter << s.shiftAmount;
         const codeAfterShift = `code = 0b${shiftedCode.toString(2).padStart(nextNumBits, '0')}`;
 
@@ -644,10 +812,10 @@ export class CanonicalizationDemo {
         });
 
         if (isLast) {
-          // Action D: highlight return-line
+          // Final for-loop evaluation (loop exits after last row)
           actions.push({
             forward: async () => {
-              this.setPseudoHighlight(['return-line']);
+              this.setPseudoHighlight(['for-loop']);
               await this.scaledDelay(BASE_PSEUDO_STEP_MS);
             },
             backward: async () => {
@@ -655,114 +823,21 @@ export class CanonicalizationDemo {
               this.setPseudoHighlight(['do-shift']);
             },
           });
+
+          // Action D: highlight return-line
+          actions.push({
+            forward: async () => {
+              this.setPseudoHighlight(['return-line']);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+            },
+            backward: async () => {
+              this.setPseudoHighlight(['for-loop']);
+            },
+          });
         }
 
       } else if (step.kind === 'build-tree') {
-        const s = step;
-        const treeBeforeIdx = buildTreeCount;
-        buildTreeCount++;
-        const treeAfterIdx = buildTreeCount;
-
-        actions.push({
-          forward: async () => {
-            const treeAfter = buildCanonicalTree(rows, treeAfterIdx - 1);
-
-            // First build step: fade out Huffman tree and init canonical renderer
-            if (treeBeforeIdx === 0) {
-              this.clearPseudoHighlight();
-              this.codeDisplayEl.style.opacity = '0';
-
-              const fadeDur = Math.round(400 / this.speedMultiplier);
-              this.svgEl.style.transition = `opacity ${fadeDur}ms`;
-              this.svgEl.style.opacity = '0';
-              await this.scaledDelay(400);
-              this.svgEl.style.transition = '';
-
-              while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
-              this.renderer = new TreeRenderer({
-                svgEl: this.svgEl,
-                transitionDuration: BASE_ANIM_MS,
-                getSpeedMultiplier: () => this.speedMultiplier,
-              });
-              this.svgEl.style.opacity = '1';
-            }
-
-            // Add all new nodes (internal nodes + leaf) with scale-in animation
-            this.renderer.update(treeAfter);
-            await this.scaledDelay(BASE_ANIM_MS * 1.2);
-
-            // Traverse every edge from root to leaf, highlighting blue + flying bit pill
-            // from the corresponding bit in the table codeword cell to the tree edge
-            const pathIds: string[] = [''];
-            for (let i = 1; i <= s.codeword.length; i++) {
-              pathIds.push(s.codeword.slice(0, i));
-            }
-            for (let i = 0; i < pathIds.length - 1; i++) {
-              const parentId = pathIds[i];
-              const childId  = pathIds[i + 1];
-              const bit = childId[childId.length - 1];
-
-              this.renderer.setEdgeHighlight(parentId, childId, true);
-
-              const bitEl = this.tableRowEls[s.sourceRowIndex]
-                .querySelector<HTMLElement>(`.canon-cw-bit[data-bit-idx="${i}"]`);
-              const edgeLabelPos = this.renderer.getEdgeLabelPos(parentId, childId);
-              if (bitEl && edgeLabelPos) {
-                const bitRect = bitEl.getBoundingClientRect();
-                const fromX = bitRect.left + bitRect.width / 2;
-                const fromY = bitRect.top + bitRect.height / 2;
-                const edgeVp = this.svgToViewport(edgeLabelPos.x, edgeLabelPos.y);
-                await this.fly(fromX, fromY, edgeVp.x, edgeVp.y, bit, 'canon-bit-floater');
-              }
-            }
-
-            // Leaf reached: glow gold
-            this.renderer.setHighlight([s.codeword], true);
-
-            // Symbol flies from table row to leaf in gold
-            const leafPos = this.renderer.getNodePos(s.codeword);
-            if (leafPos) {
-              const rowEl = this.tableRowEls[s.sourceRowIndex];
-              const leafVp = this.svgToViewport(leafPos.x, leafPos.y);
-              await this.flyFromRow(rowEl, leafVp.x, leafVp.y, s.symbol, 'canon-symbol-floater');
-            }
-
-            // Dwell then clear highlights
-            await this.scaledDelay(BASE_STEP_MS * 0.5);
-            this.renderer.clearEdgeHighlights();
-            this.renderer.setHighlight([s.codeword], false);
-          },
-          backward: async () => {
-            // Clear any lingering highlights
-            this.renderer.clearEdgeHighlights();
-            this.renderer.setHighlight([s.codeword], false);
-
-            if (treeBeforeIdx === 0) {
-              // Undo the SVG swap: restore original Huffman tree
-              const fadeDur = Math.round(400 / this.speedMultiplier);
-              this.svgEl.style.transition = `opacity ${fadeDur}ms`;
-              this.svgEl.style.opacity = '0';
-              await this.scaledDelay(400);
-              this.svgEl.style.transition = '';
-
-              while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
-              this.renderer = new TreeRenderer({
-                svgEl: this.svgEl,
-                transitionDuration: BASE_ANIM_MS,
-                getSpeedMultiplier: () => this.speedMultiplier,
-              });
-              this.renderer.update(this.huffmanTree);
-              this.svgEl.style.opacity = '1';
-
-              this.setPseudoHighlight(['return-line']);
-              this.codeDisplayEl.style.opacity = '1';
-            } else {
-              const treeBefore = buildCanonicalTree(rows, treeBeforeIdx - 1);
-              this.renderer.update(treeBefore);
-              await this.scaledDelay(BASE_ANIM_MS);
-            }
-          },
-        });
+        // Skipped — build-tree actions are emitted inline after each assign step
       }
     }
 

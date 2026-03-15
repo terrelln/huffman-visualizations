@@ -221,3 +221,46 @@ export function buildCanonicalTree(rows: CanonRow[], upToIndex: number): Tree {
 
   return makeTree([''], [...nodes.values()]);
 }
+
+// Like buildCanonicalTree but also adds extra internal-node IDs beyond upToIndex.
+// Used for progressive tree construction: reveal one node at a time as the path is traversed.
+// extraIds must be in path order (root → leaf direction); parents must precede children.
+export function buildCanonicalTreePartial(
+  rows: CanonRow[],
+  upToIndex: number,
+  extraIds: string[],
+): Tree {
+  if (upToIndex < 0 && extraIds.length === 0) return makeTree([], []);
+
+  const nodes = new Map<string, TreeNode>();
+  nodes.set('', { id: '', label: '' });
+
+  const wire = (id: string) => {
+    if (!id) return;
+    const parent = id.slice(0, -1);
+    const bit = id[id.length - 1];
+    const p = nodes.get(parent);
+    if (!p) return;
+    if (bit === '0') nodes.set(parent, { ...p, leftId: id });
+    else nodes.set(parent, { ...p, rightId: id });
+  };
+
+  for (let i = 0; i <= upToIndex && i < rows.length; i++) {
+    const cw = rows[i].canonicalCodeword;
+    if (!cw) continue;
+    for (let len = 1; len < cw.length; len++) {
+      const prefix = cw.slice(0, len);
+      if (!nodes.has(prefix)) { nodes.set(prefix, { id: prefix, label: '' }); wire(prefix); }
+    }
+    nodes.set(cw, { id: cw, label: rows[i].symbol });
+    wire(cw);
+  }
+
+  for (const id of extraIds) {
+    if (!id || nodes.has(id)) continue;
+    nodes.set(id, { id, label: '' });
+    wire(id);
+  }
+
+  return makeTree([''], [...nodes.values()]);
+}
