@@ -862,9 +862,14 @@ button:disabled {
 
 .canon-code-display {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-  font-size: 0.8rem;
-  color: #212529;
-  margin-top: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #7a5200;
+  background: #fff3cd;
+  border-left: 3px solid #f59f00;
+  border-radius: 0 4px 4px 0;
+  padding: 5px 10px;
+  margin-top: 8px;
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -876,33 +881,38 @@ button:disabled {
   overflow: hidden;
 }
 
-.canon-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-size: 0.85rem;
+.canon-table-header,
+.canon-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr 4fr;
 }
 
-.canon-table thead th {
+.canon-table-header {
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #6c757d;
-  padding: 6px 10px;
   border-bottom: 1px solid #dee2e6;
-  text-align: left;
+}
+
+.canon-table-header > div,
+.canon-row > div {
+  padding: 5px 10px;
+}
+
+.canon-table-body {
+  font-size: 0.85rem;
+  position: relative;
 }
 
 .canon-row {
+  background: #fff;
+  border-bottom: 1px solid #f1f3f5;
   transition: background 0.15s;
 }
 
-.canon-row td {
-  padding: 5px 10px;
-  border-bottom: 1px solid #f1f3f5;
-}
-
-.canon-row:last-child td {
+.canon-table-body .canon-row:last-child {
   border-bottom: none;
 }
 

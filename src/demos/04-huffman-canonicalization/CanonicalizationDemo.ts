@@ -9,6 +9,7 @@ import type { Tree } from '../../tree/BinaryTree';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const BASE_STEP_MS = 700;
+const BASE_PSEUDO_STEP_MS = 1200; // slower dwell for pseudocode line highlights
 const BASE_ANIM_MS = 500;
 const BASE_FLY_MS  = 500;
 
@@ -47,6 +48,7 @@ export class CanonicalizationDemo {
   private isAnimating = false;
   private isPlaying = false;
   private speedMultiplier = 1;
+  private generation = 0;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -59,7 +61,7 @@ export class CanonicalizationDemo {
 
   // Table rows DOM refs (by rowIndex in the *sorted* rows order, but initially in extract order)
   // We store them in extraction order first; after sort we reorder.
-  private tableRowEls: HTMLTableRowElement[] = [];
+  private tableRowEls: HTMLElement[] = [];
   private codeDisplayEl!: HTMLElement;
   private pseudoEl!: HTMLElement;
 
@@ -142,9 +144,11 @@ export class CanonicalizationDemo {
   }
 
   private async playLoop(): Promise<void> {
-    while (this.isPlaying && !this.isAllDone()) {
+    const gen = this.generation;
+    while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
     }
+    if (this.generation !== gen) return;
     if (this.isAllDone()) {
       this.isPlaying = false;
       this.updateNavButtons();
@@ -152,10 +156,12 @@ export class CanonicalizationDemo {
   }
 
   private async runPhase(fn: () => Promise<void>): Promise<void> {
+    const gen = this.generation;
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
     await fn();
+    if (this.generation !== gen) return;
     this.isAnimating = false;
     this.updateNavButtons();
   }
@@ -163,9 +169,10 @@ export class CanonicalizationDemo {
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
     if (this.actions.length > 0) {
+      const gen = this.generation;
       const action = this.actions.shift()!;
       await this.runPhase(action.forward);
-      this.completedActions.push(action);
+      if (this.generation === gen) this.completedActions.push(action);
     }
   }
 
@@ -210,11 +217,12 @@ export class CanonicalizationDemo {
     rowEl: HTMLElement,
     text: string,
     cssClass: string,
+    flyMs = BASE_FLY_MS,
   ): Promise<void> {
     const targetRect = rowEl.getBoundingClientRect();
     const toX = targetRect.left + targetRect.width / 2;
     const toY = targetRect.top + targetRect.height / 2;
-    await this.fly(fromX, fromY, toX, toY, text, cssClass);
+    await this.fly(fromX, fromY, toX, toY, text, cssClass, flyMs);
   }
 
   private async flyFromRow(
@@ -222,12 +230,13 @@ export class CanonicalizationDemo {
     toX: number, toY: number,
     text: string,
     cssClass: string,
+    flyMs = BASE_FLY_MS,
   ): Promise<void> {
     const symCell = rowEl.querySelector<HTMLElement>('.canon-cell-sym') ?? rowEl;
     const sourceRect = symCell.getBoundingClientRect();
     const fromX = sourceRect.left + sourceRect.width / 2;
     const fromY = sourceRect.top + sourceRect.height / 2;
-    await this.fly(fromX, fromY, toX, toY, text, cssClass);
+    await this.fly(fromX, fromY, toX, toY, text, cssClass, flyMs);
   }
 
   private async fly(
@@ -235,6 +244,7 @@ export class CanonicalizationDemo {
     toX: number, toY: number,
     text: string,
     cssClass: string,
+    flyMs = BASE_FLY_MS,
   ): Promise<void> {
     const floater = document.createElement('div');
     floater.className = cssClass;
@@ -247,12 +257,12 @@ export class CanonicalizationDemo {
     floater.style.opacity = '1';
     await this.scaledDelay(BASE_STEP_MS * 0.4);
 
-    const flyDur = Math.round(BASE_FLY_MS / this.speedMultiplier);
+    const flyDur = Math.round(flyMs / this.speedMultiplier);
     floater.style.transition = `left ${flyDur}ms ease, top ${flyDur}ms ease, opacity ${flyDur}ms ease`;
     floater.style.left = `${toX}px`;
     floater.style.top = `${toY}px`;
     floater.style.opacity = '0';
-    await this.scaledDelay(BASE_FLY_MS);
+    await this.scaledDelay(flyMs);
     floater.remove();
   }
 
@@ -313,56 +323,52 @@ export class CanonicalizationDemo {
     this.pseudoEl.appendChild(this.codeDisplayEl);
     this.canonPanelEl.appendChild(this.pseudoEl);
 
-    // Table
+    // Table (div-based grid so transforms move the full row background)
     const tableWrap = document.createElement('div');
     tableWrap.className = 'canon-table-wrap';
 
-    const table = document.createElement('table');
-    table.className = 'canon-table';
-
-    const thead = document.createElement('thead');
-    const headerRow = document.createElement('tr');
+    const headerRow = document.createElement('div');
+    headerRow.className = 'canon-table-header';
     for (const label of ['Symbol', 'Bits', 'Codeword']) {
-      const th = document.createElement('th');
-      th.textContent = label;
-      headerRow.appendChild(th);
+      const cell = document.createElement('div');
+      cell.textContent = label;
+      headerRow.appendChild(cell);
     }
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
+    tableWrap.appendChild(headerRow);
 
-    const tbody = document.createElement('tbody');
+    const tbody = document.createElement('div');
+    tbody.className = 'canon-table-body';
 
     // Pre-render all rows with opacity 0 (in extraction DFS order)
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const tr = document.createElement('tr');
-      tr.className = 'canon-row';
-      tr.style.opacity = '0';
+      const rowEl = document.createElement('div');
+      rowEl.className = 'canon-row';
+      rowEl.style.opacity = '0';
 
-      const symTd = document.createElement('td');
-      symTd.className = 'canon-cell-sym';
-      symTd.textContent = row.symbol;
+      const symCell = document.createElement('div');
+      symCell.className = 'canon-cell-sym';
+      symCell.textContent = row.symbol;
 
-      const bitsTd = document.createElement('td');
-      bitsTd.className = 'canon-cell-bits';
-      bitsTd.textContent = String(row.numBits);
+      const bitsCell = document.createElement('div');
+      bitsCell.className = 'canon-cell-bits';
+      bitsCell.textContent = String(row.numBits);
 
-      const cwTd = document.createElement('td');
-      cwTd.className = 'canon-cell-cw';
+      const cwCell = document.createElement('div');
+      cwCell.className = 'canon-cell-cw';
       const cwSpan = document.createElement('span');
       cwSpan.className = 'canon-cw-text';
       cwSpan.textContent = row.naiveCodeword;
-      cwTd.appendChild(cwSpan);
+      cwCell.appendChild(cwSpan);
 
-      tr.appendChild(symTd);
-      tr.appendChild(bitsTd);
-      tr.appendChild(cwTd);
-      tbody.appendChild(tr);
-      this.tableRowEls.push(tr);
+      rowEl.appendChild(symCell);
+      rowEl.appendChild(bitsCell);
+      rowEl.appendChild(cwCell);
+      tbody.appendChild(rowEl);
+      this.tableRowEls.push(rowEl);
     }
 
-    table.appendChild(tbody);
-    tableWrap.appendChild(table);
+    tableWrap.appendChild(tbody);
     this.canonPanelEl.appendChild(tableWrap);
   }
 
@@ -411,19 +417,20 @@ export class CanonicalizationDemo {
         const s = step;
         actions.push({
           forward: async () => {
+            const gen = this.generation;
             this.renderer.setHighlight([s.leafId], true);
             // Fly from leaf position to table row
+            const rowEl = this.tableRowEls[s.rowIndex];
             const nodePos = this.renderer.getNodePos(s.leafId);
             if (nodePos) {
               const vp = this.svgToViewport(nodePos.x, nodePos.y);
-              const rowEl = this.tableRowEls[s.rowIndex];
-              await this.flyToRow(vp.x, vp.y, rowEl, extractionRows[s.rowIndex].symbol, 'canon-row-floater');
+              await this.flyToRow(vp.x, vp.y, rowEl, extractionRows[s.rowIndex].symbol, 'canon-row-floater', BASE_FLY_MS * 1.8);
             }
-            const rowEl = this.tableRowEls[s.rowIndex];
+            if (this.generation !== gen) return;
             rowEl.style.transition = 'opacity 0.3s';
             rowEl.style.opacity = '1';
             this.renderer.setHighlight([s.leafId], false);
-            await this.scaledDelay(BASE_STEP_MS * 0.2);
+            await this.scaledDelay(BASE_STEP_MS * 0.6);
           },
           backward: async () => {
             const rowEl = this.tableRowEls[s.rowIndex];
@@ -441,104 +448,86 @@ export class CanonicalizationDemo {
           forward: async () => {
             this.setPseudoHighlight(['fn-canon', 'sort-line']);
 
-            // Measure current positions and target positions
             const tableBody = this.tableRowEls[0]?.parentElement as HTMLElement;
             if (!tableBody) return;
 
-            // Current positions of each row
-            const currentRects = this.tableRowEls.map(r => r.getBoundingClientRect());
+            // Snapshot the top of each slot (slot j = current position of tableRowEls[j])
+            const tops = this.tableRowEls.map(r => r.getBoundingClientRect().top);
 
-            // Compute target order: sorted position i has the row at permutation[i]
-            const newOrder = s.permutation.map(origIdx => this.tableRowEls[origIdx]);
-            const targetRects = newOrder.map(r => r.getBoundingClientRect());
-
-            // Apply translateY to animate each row toward where it will end up
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              const origRow = this.tableRowEls[i];
-              origRow.style.transition = 'none';
-              origRow.style.transform = 'translateY(0px)';
+            for (const row of this.tableRowEls) {
+              row.style.transition = 'none';
+              row.style.transform = 'translateY(0)';
             }
 
             await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-            const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              const origRow = this.tableRowEls[i];
-              const sortedPos = s.permutation.indexOf(i);
-              const currentTop = currentRects[i].top;
-              const targetTop = targetRects[sortedPos].top;
-              const translateY = targetTop - currentTop;
-              origRow.style.transition = `transform ${dur}ms ease`;
-              origRow.style.transform = `translateY(${translateY}px)`;
+            // permutation[i] = extraction index of the row that belongs at sorted slot i
+            // → row at extraction index permutation[i] moves from tops[permutation[i]] to tops[i]
+            const sortAnimMs = BASE_ANIM_MS * 1.6;
+            const dur = Math.round(sortAnimMs / this.speedMultiplier);
+            for (let i = 0; i < s.permutation.length; i++) {
+              const row = this.tableRowEls[s.permutation[i]];
+              const translateY = tops[i] - tops[s.permutation[i]];
+              row.style.transition = `transform ${dur}ms ease`;
+              row.style.transform = `translateY(${translateY}px)`;
             }
 
-            await this.scaledDelay(BASE_ANIM_MS);
+            await this.scaledDelay(sortAnimMs);
 
-            // Reorder DOM, clear transforms
-            for (let i = 0; i < newOrder.length; i++) {
-              tableBody.appendChild(newOrder[i]);
-              newOrder[i].style.transition = '';
-              newOrder[i].style.transform = '';
+            // Commit new DOM order, clear transforms
+            const newOrder = s.permutation.map(idx => this.tableRowEls[idx]);
+            for (const row of newOrder) {
+              tableBody.appendChild(row);
+              row.style.transition = '';
+              row.style.transform = '';
             }
-            // Update tableRowEls to sorted order
             for (let i = 0; i < newOrder.length; i++) {
               this.tableRowEls[i] = newOrder[i];
             }
 
-            await this.scaledDelay(BASE_STEP_MS * 0.3);
+            await this.scaledDelay(BASE_STEP_MS * 0.8);
           },
           backward: async () => {
-            // Reverse the sort: put rows back in extraction order
             const tableBody = this.tableRowEls[0]?.parentElement as HTMLElement;
             if (!tableBody) return;
 
-            // Current order: sorted. Target: extraction order.
-            // s.permutation[i] = extraction index for sorted position i
-            // So extraction order row extractIdx was at sorted position:
-            const extractionOrder: HTMLTableRowElement[] = [];
-            const sortedRows = [...this.tableRowEls];
-            for (let sortedPos = 0; sortedPos < s.permutation.length; sortedPos++) {
-              const extractIdx = s.permutation[sortedPos];
-              extractionOrder[extractIdx] = sortedRows[sortedPos];
-            }
+            // Snapshot the top of each slot (currently in sorted order)
+            const tops = this.tableRowEls.map(r => r.getBoundingClientRect().top);
 
-            const currentRects = sortedRows.map(r => r.getBoundingClientRect());
-            // Animate back
-            const targetRects = extractionOrder.map(r => r.getBoundingClientRect());
+            for (const row of this.tableRowEls) {
+              row.style.transition = 'none';
+              row.style.transform = 'translateY(0)';
+            }
 
             await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
+            // Row at sorted position i (extraction index permutation[i]) moves
+            // from tops[i] back to extraction slot permutation[i] (top = tops[permutation[i]])
             const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
-            for (let i = 0; i < sortedRows.length; i++) {
-              // sortedRows[i] needs to go to its extraction position
-              const extractIdx = s.permutation[i];
-              const currentTop = currentRects[i].top;
-              const targetTop = targetRects[extractIdx].top;
-              const delta = targetTop - currentTop;
-              sortedRows[i].style.transition = `transform ${dur}ms ease`;
-              sortedRows[i].style.transform = `translateY(${delta}px)`;
+            for (let i = 0; i < s.permutation.length; i++) {
+              const row = this.tableRowEls[i];
+              const translateY = tops[s.permutation[i]] - tops[i];
+              row.style.transition = `transform ${dur}ms ease`;
+              row.style.transform = `translateY(${translateY}px)`;
             }
 
             await this.scaledDelay(BASE_ANIM_MS);
 
-            for (let i = 0; i < extractionOrder.length; i++) {
-              tableBody.appendChild(extractionOrder[i]);
-              extractionOrder[i].style.transition = '';
-              extractionOrder[i].style.transform = '';
+            // Commit extraction-order DOM, clear transforms
+            const extractionOrder: HTMLElement[] = new Array(s.permutation.length);
+            for (let i = 0; i < s.permutation.length; i++) {
+              extractionOrder[s.permutation[i]] = this.tableRowEls[i];
+            }
+            for (const row of extractionOrder) {
+              tableBody.appendChild(row);
+              row.style.transition = '';
+              row.style.transform = '';
             }
             for (let i = 0; i < extractionOrder.length; i++) {
               this.tableRowEls[i] = extractionOrder[i];
             }
 
             this.clearPseudoHighlight();
-            // Restore naive codewords
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              const cwSpan = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cw-text');
-              if (cwSpan) {
-                cwSpan.style.transition = 'opacity 0.3s';
-                cwSpan.style.opacity = '1';
-              }
-            }
           },
         });
 
@@ -552,7 +541,7 @@ export class CanonicalizationDemo {
                 cwSpan.style.opacity = '0';
               }
             }
-            await this.scaledDelay(BASE_STEP_MS * 0.6);
+            await this.scaledDelay(BASE_STEP_MS * 1.2);
           },
           backward: async () => {
             for (let i = 0; i < this.tableRowEls.length; i++) {
@@ -573,7 +562,7 @@ export class CanonicalizationDemo {
             this.setPseudoHighlight(['code-init']);
             this.codeDisplayEl.style.opacity = '1';
             this.codeDisplayEl.textContent = 'code = 0b0';
-            await this.scaledDelay(BASE_STEP_MS);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.codeDisplayEl.style.opacity = '0';
@@ -599,7 +588,7 @@ export class CanonicalizationDemo {
               ).join('');
               cwSpan.style.opacity = '1';
             }
-            await this.scaledDelay(BASE_STEP_MS);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
@@ -629,7 +618,7 @@ export class CanonicalizationDemo {
             this.setPseudoHighlight(['inc-code']);
             this.codeDisplayEl.textContent = codeAfterInc;
             this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
-            await this.scaledDelay(BASE_STEP_MS * 0.8);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
@@ -646,7 +635,7 @@ export class CanonicalizationDemo {
           forward: async () => {
             this.setPseudoHighlight(['do-shift']);
             this.codeDisplayEl.textContent = codeAfterShift;
-            await this.scaledDelay(BASE_STEP_MS * 0.8);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.codeDisplayEl.textContent = codeAfterInc;
@@ -659,7 +648,7 @@ export class CanonicalizationDemo {
           actions.push({
             forward: async () => {
               this.setPseudoHighlight(['return-line']);
-              await this.scaledDelay(BASE_STEP_MS);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
             },
             backward: async () => {
               this.codeDisplayEl.textContent = codeAfterShift;
@@ -822,6 +811,11 @@ export class CanonicalizationDemo {
   // ── Start ──────────────────────────────────────────────────────────────
 
   start(inputs: SymbolInput[], _inputString: string): void {
+    // Invalidate any in-flight async chains from a previous run
+    this.generation++;
+    this.isPlaying = false;
+    this.isAnimating = false;
+
     const result = buildCanonSteps(inputs);
     this.huffmanTree = result.huffmanTree;
     this.rows = result.rows;
@@ -888,7 +882,7 @@ export class CanonicalizationDemo {
     slider.min = String(Math.log2(0.2));
     slider.max = String(Math.log2(4));
     slider.step = '0.01';
-    slider.value = '0';
+    slider.value = String(Math.log2(this.speedMultiplier));
     slider.className = 'speed-slider';
     slider.addEventListener('input', () => {
       this.speedMultiplier = Math.pow(2, parseFloat(slider.value));

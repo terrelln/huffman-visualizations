@@ -472,7 +472,7 @@ export class HuffmanDemo {
     slider.min = String(Math.log2(0.2));
     slider.max = String(Math.log2(4));
     slider.step = '0.01';
-    slider.value = '0';
+    slider.value = String(Math.log2(this.speedMultiplier));
     slider.className = 'speed-slider';
     slider.addEventListener('input', () => {
       this.speedMultiplier = Math.pow(2, parseFloat(slider.value));
