@@ -1,6 +1,6 @@
-import { makeTree } from '../tree/BinaryTree';
-import type { Tree, TreeNode } from '../tree/BinaryTree';
-import type { SectionInfo } from '../tree/TreeRenderer';
+import { makeTree } from '../../tree/BinaryTree';
+import type { Tree, TreeNode } from '../../tree/BinaryTree';
+import type { SectionInfo } from '../../tree/TreeRenderer';
 
 export interface SymbolInput {
   symbol: string;

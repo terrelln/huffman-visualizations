@@ -1,5 +1,5 @@
 import './style.css';
-import { HuffmanDemo } from './demo/HuffmanDemo';
+import { HuffmanDemo } from './demos/01-huffman-tree-construction/HuffmanDemo';
 
 const inputEl      = document.getElementById('demo-root')! as HTMLElement;
 const controlsEl   = document.getElementById('viz-controls-root')! as HTMLElement;

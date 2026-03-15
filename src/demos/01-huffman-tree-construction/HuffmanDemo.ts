@@ -1,4 +1,4 @@
-import { TreeRenderer } from '../tree/TreeRenderer';
+import { TreeRenderer } from '../../tree/TreeRenderer';
 
 import { buildHuffmanSnapshots } from './HuffmanAlgorithm';
 import type { SymbolInput, HuffmanSnapshot, SelectionStep } from './HuffmanAlgorithm';
