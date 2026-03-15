@@ -7,11 +7,11 @@ const BASE_STEP_MS = 1200; // how long each pseudocode phase is shown at 1× spe
 const BASE_ANIM_MS = 500;  // CSS transition duration for node moves at 1× speed
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
-  { symbol: 'a', freq: 5 },
-  { symbol: 'b', freq: 3 },
-  { symbol: 'c', freq: 2 },
-  { symbol: 'd', freq: 1 },
-  { symbol: 'e', freq: 1 },
+  { symbol: 'A', freq: 5 },
+  { symbol: 'B', freq: 3 },
+  { symbol: 'C', freq: 2 },
+  { symbol: 'D', freq: 1 },
+  { symbol: 'E', freq: 1 },
 ];
 
 // ── Pseudocode ───────────────────────────────────────────────────────────────
@@ -438,10 +438,10 @@ export class HuffmanDemo {
   private nextUnusedSymbol(chips: HTMLElement): string {
     const used = new Set(
       Array.from(chips.querySelectorAll('.chip-sym'))
-        .map(el => (el as HTMLInputElement).value.trim().toLowerCase())
+        .map(el => (el as HTMLInputElement).value.trim().toUpperCase())
     );
     for (let i = 0; i < 26; i++) {
-      const ch = String.fromCharCode(97 + i);
+      const ch = String.fromCharCode(65 + i);
       if (!used.has(ch)) return ch;
     }
     return '';
@@ -501,7 +501,7 @@ export class HuffmanDemo {
     const symInput = document.createElement('input');
     symInput.type = 'text';
     symInput.className = 'chip-sym';
-    symInput.placeholder = 'a';
+    symInput.placeholder = 'A';
     symInput.value = symbol;
     symInput.maxLength = 1;
 
