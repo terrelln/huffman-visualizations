@@ -435,6 +435,18 @@ export class HuffmanDemo {
 
   // ── Input strip (persistent) ─────────────────────────────────────────────────
 
+  private nextUnusedSymbol(chips: HTMLElement): string {
+    const used = new Set(
+      Array.from(chips.querySelectorAll('.chip-sym'))
+        .map(el => (el as HTMLInputElement).value.trim().toLowerCase())
+    );
+    for (let i = 0; i < 26; i++) {
+      const ch = String.fromCharCode(97 + i);
+      if (!used.has(ch)) return ch;
+    }
+    return '';
+  }
+
   private buildInputStrip(): void {
     this.inputEl.innerHTML = '';
 
@@ -455,7 +467,7 @@ export class HuffmanDemo {
     addBtn.className = 'btn-secondary';
     addBtn.textContent = '+ Add';
     addBtn.addEventListener('click', () => {
-      const chip = this.createSymbolChip('', 0, chips);
+      const chip = this.createSymbolChip(this.nextUnusedSymbol(chips), 1, chips);
       chips.appendChild(chip);
       (chip.querySelector('.chip-sym') as HTMLInputElement).focus();
     });
