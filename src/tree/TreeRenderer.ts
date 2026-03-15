@@ -40,6 +40,7 @@ export class TreeRenderer {
   private nodeGroupMap = new Map<string, SVGGElement>();
   private edgeMap = new Map<string, SVGLineElement>();
   private edgeLabelMap = new Map<string, SVGTextElement>();
+  private highlightedEdges = new Set<string>();
 
   constructor({ svgEl, nodeRadius = 22, transitionDuration = 800, getSpeedMultiplier = () => 1 }: RendererOptions) {
     this.svgEl = svgEl;
@@ -275,6 +276,29 @@ export class TreeRenderer {
     for (const id of ids) {
       this.nodeGroupMap.get(id)?.classList.toggle('merging', on);
     }
+  }
+
+  setEdgeHighlight(parentId: string, childId: string, on: boolean): void {
+    const key = `${parentId}->${childId}`;
+    const line = this.edgeMap.get(key);
+    if (!line) return;
+    line.classList.toggle('highlighted', on);
+    if (on) this.highlightedEdges.add(key);
+    else this.highlightedEdges.delete(key);
+  }
+
+  clearEdgeHighlights(): void {
+    for (const key of this.highlightedEdges) {
+      this.edgeMap.get(key)?.classList.remove('highlighted');
+    }
+    this.highlightedEdges.clear();
+  }
+
+  getEdgeLabelPos(parentId: string, childId: string): { x: number; y: number } | null {
+    const key = `${parentId}->${childId}`;
+    const lbl = this.edgeLabelMap.get(key);
+    if (!lbl) return null;
+    return { x: parseFloat(lbl.getAttribute('x') ?? '0'), y: parseFloat(lbl.getAttribute('y') ?? '0') };
   }
 
   update(tree: Tree, sections?: SectionInfo): void {
