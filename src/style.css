@@ -339,6 +339,15 @@ button:disabled {
   stroke-width: 1.5;
 }
 
+.edge-label {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #868e96;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* ── Comparison animation label ─────────────────────────────────────────── */
 
 .comparison-label-bg {

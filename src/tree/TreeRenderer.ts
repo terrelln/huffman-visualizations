@@ -34,10 +34,12 @@ export class TreeRenderer {
 
   private sectionLabelsGroup: SVGGElement;
   private edgesGroup: SVGGElement;
+  private edgeLabelsGroup: SVGGElement;
   private nodesGroup: SVGGElement;
 
   private nodeGroupMap = new Map<string, SVGGElement>();
   private edgeMap = new Map<string, SVGLineElement>();
+  private edgeLabelMap = new Map<string, SVGTextElement>();
 
   constructor({ svgEl, nodeRadius = 22, transitionDuration = 800, getSpeedMultiplier = () => 1 }: RendererOptions) {
     this.svgEl = svgEl;
@@ -49,11 +51,14 @@ export class TreeRenderer {
     this.sectionLabelsGroup.id = 'section-labels';
     this.edgesGroup = document.createElementNS(SVG_NS, 'g');
     this.edgesGroup.id = 'edges';
+    this.edgeLabelsGroup = document.createElementNS(SVG_NS, 'g');
+    this.edgeLabelsGroup.id = 'edge-labels';
     this.nodesGroup = document.createElementNS(SVG_NS, 'g');
     this.nodesGroup.id = 'nodes';
 
     this.svgEl.appendChild(this.sectionLabelsGroup);
     this.svgEl.appendChild(this.edgesGroup);
+    this.svgEl.appendChild(this.edgeLabelsGroup);
     this.svgEl.appendChild(this.nodesGroup);
   }
 
@@ -442,13 +447,17 @@ export class TreeRenderer {
     const newEdgeKeys = new Set<string>();
 
     for (const [id, node] of tree.nodes) {
-      for (const childId of [node.leftId, node.rightId]) {
-        if (!childId) continue;
+      const children: Array<[string, boolean]> = [];
+      if (node.leftId)  children.push([node.leftId,  true]);
+      if (node.rightId) children.push([node.rightId, false]);
+
+      for (const [childId, isLeft] of children) {
         const key = `${id}->${childId}`;
         newEdgeKeys.add(key);
 
         const parentPos = positions.get(id)!;
-        const childPos = positions.get(childId)!;
+        const childPos  = positions.get(childId)!;
+        const { x: lx, y: ly } = this.edgeLabelPos(parentPos, childPos, isLeft);
 
         if (this.edgeMap.has(key)) {
           const line = this.edgeMap.get(key)!;
@@ -456,6 +465,9 @@ export class TreeRenderer {
           line.setAttribute('y1', String(parentPos.y));
           line.setAttribute('x2', String(childPos.x));
           line.setAttribute('y2', String(childPos.y));
+          const lbl = this.edgeLabelMap.get(key)!;
+          lbl.setAttribute('x', String(lx));
+          lbl.setAttribute('y', String(ly));
         } else {
           const line = document.createElementNS(SVG_NS, 'line');
           line.setAttribute('x1', String(parentPos.x));
@@ -465,6 +477,16 @@ export class TreeRenderer {
           line.classList.add('tree-edge');
           this.edgesGroup.appendChild(line);
           this.edgeMap.set(key, line);
+
+          const lbl = document.createElementNS(SVG_NS, 'text');
+          lbl.classList.add('edge-label');
+          lbl.textContent = isLeft ? '0' : '1';
+          lbl.setAttribute('x', String(lx));
+          lbl.setAttribute('y', String(ly));
+          lbl.setAttribute('text-anchor', 'middle');
+          lbl.setAttribute('dominant-baseline', 'central');
+          this.edgeLabelsGroup.appendChild(lbl);
+          this.edgeLabelMap.set(key, lbl);
         }
       }
     }
@@ -473,7 +495,30 @@ export class TreeRenderer {
       if (!newEdgeKeys.has(key)) {
         this.edgeMap.get(key)!.remove();
         this.edgeMap.delete(key);
+        this.edgeLabelMap.get(key)?.remove();
+        this.edgeLabelMap.delete(key);
       }
     }
+  }
+
+  /** Position for an edge bit-label: 30% from parent, offset perpendicular to edge. */
+  private edgeLabelPos(
+    parentPos: { x: number; y: number },
+    childPos:  { x: number; y: number },
+    isLeft: boolean,
+  ): { x: number; y: number } {
+    const dx = childPos.x - parentPos.x;
+    const dy = childPos.y - parentPos.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 0.001) return parentPos;
+    const t = 0.5;
+    const mx = parentPos.x + t * dx;
+    const my = parentPos.y + t * dy;
+    // Perpendicular: CCW for left child (0), CW for right child (1)
+    const ndx = dx / len, ndy = dy / len;
+    const perpX = isLeft ? -ndy :  ndy;
+    const perpY = isLeft ?  ndx : -ndx;
+    const offset = 9;
+    return { x: mx + perpX * offset, y: my + perpY * offset };
   }
 }
