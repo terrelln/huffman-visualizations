@@ -489,9 +489,9 @@ export class HuffmanDemo {
     const symInput = document.createElement('input');
     symInput.type = 'text';
     symInput.className = 'chip-sym';
-    symInput.placeholder = 'sym';
+    symInput.placeholder = 'a';
     symInput.value = symbol;
-    symInput.maxLength = 10;
+    symInput.maxLength = 1;
 
     const sep = document.createElement('span');
     sep.className = 'chip-sep';
