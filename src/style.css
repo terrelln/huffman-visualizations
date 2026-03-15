@@ -653,6 +653,153 @@ button:disabled {
   border: 1px solid #0d6efd;
 }
 
+/* ── Decoding panel ─────────────────────────────────────────────────────── */
+/*
+  Mirrors enc-* classes with input/output roles swapped.
+  See DECODING ↔ ENCODING CORRESPONDENCE in HuffmanDecodingDemo.ts.
+
+  enc-panel        ↔  dec-panel        (same dimensions)
+  enc-header       ↔  dec-header       (same style)
+  enc-output       ↔  dec-input        (bit groups; bits start visible in dec)
+  enc-group        ↔  dec-group        (identical)
+  enc-group-bits   ↔  dec-group-bits   (identical)
+  enc-bit          ↔  dec-bit          (same style; dec adds dec-bit-consumed state)
+  enc-brace-*      ↔  dec-brace-*      (identical)
+  enc-input-row    ↔  dec-output-row   (char boxes; chars start hidden in dec)
+  enc-char         ↔  dec-char         (same style; dec chars start at opacity 0)
+  enc-bit-floater  ↔  dec-bit-floater  (same style; flies opposite direction)
+*/
+
+.dec-panel {
+  flex-shrink: 0;
+  width: 220px;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.dec-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6c757d;
+  margin-bottom: 8px;
+}
+
+/* Input section: encoded bits (all visible, dim as consumed) — mirrors enc-output */
+.dec-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  align-items: flex-start;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 8px 8px 4px;
+  margin-bottom: 8px;
+}
+
+.dec-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.dec-group-bits {
+  display: flex;
+  gap: 2px;
+}
+
+/* Mirrors enc-bit */
+.dec-bit {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: #e9ecef;
+  color: #212529;
+  line-height: 18px;
+}
+
+/* Consumed bits dim to show they have been processed by the decoder */
+.dec-bit-consumed {
+  opacity: 0.3;
+}
+
+/* Mirrors enc-brace / enc-brace-* */
+.dec-brace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.dec-brace-inner {
+  display: flex;
+  width: 100%;
+}
+
+.dec-brace-left-arm {
+  flex: 1;
+  height: 6px;
+  border-bottom: 1.5px solid #868e96;
+  border-left: 1.5px solid #868e96;
+  border-bottom-left-radius: 3px;
+}
+
+.dec-brace-right-arm {
+  flex: 1;
+  height: 6px;
+  border-bottom: 1.5px solid #868e96;
+  border-right: 1.5px solid #868e96;
+  border-bottom-right-radius: 3px;
+}
+
+.dec-brace-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #495057;
+  line-height: 1.4;
+}
+
+/* Output section: decoded char boxes, start hidden — mirrors enc-input-row */
+.dec-output-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+/* Mirrors enc-char; starts at opacity 0 (set inline), fades in when decoded */
+.dec-char {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 1.5px solid #dee2e6;
+  border-radius: 4px;
+  background: #f8f9fa;
+  user-select: none;
+}
+
+/* Mirrors enc-bit-floater; flies in the opposite direction (panel → tree) */
+.dec-bit-floater {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #cfe2ff;
+  color: #052c65;
+  border: 1px solid #0d6efd;
+}
+
 /* ── Sum animation label ─────────────────────────────────────────────────── */
 
 .sum-label-bg {
