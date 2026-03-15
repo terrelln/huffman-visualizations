@@ -38,7 +38,6 @@ export class TreeRenderer {
 
   private nodeGroupMap = new Map<string, SVGGElement>();
   private edgeMap = new Map<string, SVGLineElement>();
-  private lastQ1CenterX: number | null = null;
 
   constructor({ svgEl, nodeRadius = 22, transitionDuration = 800, getSpeedMultiplier = () => 1 }: RendererOptions) {
     this.svgEl = svgEl;
@@ -396,13 +395,10 @@ export class TreeRenderer {
       this.sectionLabelsGroup.appendChild(el);
     };
 
-    if (q1Ext) {
-      this.lastQ1CenterX = (q1Ext.minX + q1Ext.maxX) / 2;
-    }
-    const q1cx = q1Ext ? (q1Ext.minX + q1Ext.maxX) / 2 : this.lastQ1CenterX;
-    if (q1cx !== null && q1Title) {
-      addText(q1cx, LABEL_TITLE_Y,   q1Title,   'section-title');
-      addText(q1cx, LABEL_CAPTION_Y, q1Caption, 'section-caption');
+    if (q1Ext && q1Title) {
+      const cx = (q1Ext.minX + q1Ext.maxX) / 2;
+      addText(cx, LABEL_TITLE_Y,   q1Title,   'section-title');
+      addText(cx, LABEL_CAPTION_Y, q1Caption, 'section-caption');
     }
 
     if (q2Ext) {
