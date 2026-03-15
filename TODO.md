@@ -15,3 +15,11 @@
 
 * There is a dead state when pressing prev, when going back from the beginning of a symbol to the end of the previous.
 * All animations auto-play, not just the one currently on screen. Animations off screen should not auto play.
+
+# Huffman Canonicalization
+
+* Flying pill for the update to `code`
+* Highlight the row in the symbol table for the current iteration
+
+# Huffman Depth Limiting
+

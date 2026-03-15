@@ -17,22 +17,22 @@ const O = (s: string) => `<span class="po">${s}</span>`;
 const PSEUDO_LINES = [
   { id: 'fn-def',           indent: 0, html: `${K('def')} ${F('depth_limit')}(table, max_depth):` },
   { id: 'sort-line',        indent: 1, html: `${F('sort')}(table, key ${O('=')} ${O('λ')} x: x.freq)` },
-  { id: 'clamp-for',        indent: 1, html: `${K('for')} row ${K('in')} table:` },
-  { id: 'clamp-set',        indent: 2, html: `row.bits ${O('=')} ${F('min')}(row.bits, max_depth)` },
+  { id: 'clamp-for',        indent: 1, html: `${K('for')} row ${K('in')} table ${K('while')} row.bits ${O('>')} max_depth:` },
+  { id: 'clamp-set',        indent: 2, html: `row.bits ${O('=')} max_depth` },
   { id: '',                  indent: 0, html: '' },
   { id: 'w-lambda',         indent: 1, html: `weight ${O('=')} ${O('λ')} bits: 2<sup>(max_depth ${O('-')} bits)</sup>` },
   { id: 'target-line',      indent: 1, html: `W<sub>T</sub> ${O('=')} 2<sup>max_depth</sup>` },
   { id: 'kraft-init',       indent: 1, html: `W<sub>C</sub> ${O('=')} ${O('Σ')} ${F('weight')}(row.bits) ${K('for')} row ${K('in')} table` },
   { id: '',                  indent: 0, html: '' },
   { id: 'demote-for',       indent: 1, html: `${K('for')} row ${K('in')} table ${K('while')} W<sub>C</sub> ${O('>')} W<sub>T</sub>:` },
-  { id: 'demote-while',     indent: 2, html: `${K('while')} row.bits ${O('<')} max_depth ${K('and')} W<sub>C</sub> ${O('>')} W<sub>T</sub>:` },
-  { id: 'demote-kraft',     indent: 3, html: `W<sub>C</sub> ${O('-=')} ${F('weight')}(row.bits ${O('+')} 1)` },
+  { id: 'demote-while',     indent: 2, html: `${K('while')} W<sub>C</sub> ${O('>')} W<sub>T</sub> ${K('and')} row.bits ${O('<')} max_depth:` },
   { id: 'demote-inc',       indent: 3, html: `${O('++')}row.bits` },
+  { id: 'demote-kraft',     indent: 3, html: `W<sub>C</sub> ${O('-=')} ${F('weight')}(row.bits)` },
   { id: '',                  indent: 0, html: '' },
   { id: 'promote-for',      indent: 1, html: `${K('for')} row ${K('in')} ${F('reversed')}(table) ${K('while')} W<sub>C</sub> ${O('≠')} W<sub>T</sub>:` },
   { id: 'promote-while',    indent: 2, html: `${K('while')} W<sub>C</sub> ${O('+')} ${F('weight')}(row.bits) ${O('≤')} W<sub>T</sub>:` },
-  { id: 'promote-kraft',    indent: 3, html: `W<sub>C</sub> ${O('+=')} ${F('weight')}(row.bits)` },
   { id: 'promote-dec',      indent: 3, html: `${O('--')}row.bits` },
+  { id: 'promote-kraft',    indent: 3, html: `W<sub>C</sub> ${O('+=')} ${F('weight')}(row.bits)` },
   { id: '',                  indent: 0, html: '' },
   { id: 'canon-line',       indent: 1, html: `${K('return')} ${F('canonicalize')}(table)` },
 ];
@@ -231,10 +231,77 @@ export class DepthLimitingDemo {
     this.setPseudoHighlight([]);
   }
 
+  // ── Flying label animation ────────────────────────────────────────────
+
+  private async flyLabel(text: string, fromId: string, toRowIdx: number): Promise<void> {
+    // Find source: the pseudocode line with the given id
+    const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
+      `.canon-pseudo-line[data-id="${fromId}"]`
+    );
+    const targetCell = this.tableRowEls[toRowIdx]?.querySelector<HTMLElement>('.canon-cell-bits');
+    if (!sourceLine || !targetCell) return;
+
+    const sourceRect = sourceLine.getBoundingClientRect();
+    const targetRect = targetCell.getBoundingClientRect();
+
+    const label = document.createElement('div');
+    label.className = 'depth-fly-label';
+    label.textContent = text;
+    label.style.left = `${sourceRect.right + 4}px`;
+    label.style.top = `${sourceRect.top + sourceRect.height / 2}px`;
+    document.body.appendChild(label);
+
+    // Force layout
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+    const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
+    label.style.transition = `left ${dur}ms ease, top ${dur}ms ease, opacity ${dur * 0.3}ms ease ${dur * 0.7}ms`;
+    label.style.left = `${targetRect.left + targetRect.width / 2}px`;
+    label.style.top = `${targetRect.top + targetRect.height / 2}px`;
+
+    await this.scaledDelay(BASE_ANIM_MS);
+    label.style.opacity = '0';
+    await this.scaledDelay(BASE_ANIM_MS * 0.3);
+    label.remove();
+  }
+
+  private async flyToKraft(text: string, fromId: string, targetVar: 'wc' | 'wt' = 'wc'): Promise<void> {
+    const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
+      `.canon-pseudo-line[data-id="${fromId}"]`
+    );
+    if (!sourceLine || !this.kraftDisplayEl) return;
+
+    const targetSpan = this.kraftDisplayEl.querySelector<HTMLElement>(
+      targetVar === 'wc' ? '.kraft-wc' : '.kraft-wt'
+    );
+    const sourceRect = sourceLine.getBoundingClientRect();
+    const targetRect = (targetSpan ?? this.kraftDisplayEl).getBoundingClientRect();
+
+    const label = document.createElement('div');
+    label.className = 'depth-fly-label depth-fly-kraft';
+    label.textContent = text;
+    label.style.left = `${sourceRect.right + 4}px`;
+    label.style.top = `${sourceRect.top + sourceRect.height / 2}px`;
+    document.body.appendChild(label);
+
+    await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+
+    const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
+    label.style.transition = `left ${dur}ms ease, top ${dur}ms ease, opacity ${dur * 0.3}ms ease ${dur * 0.7}ms`;
+    label.style.left = `${targetRect.left + targetRect.width / 2}px`;
+    label.style.top = `${targetRect.top + targetRect.height / 2}px`;
+
+    await this.scaledDelay(BASE_ANIM_MS);
+    label.style.opacity = '0';
+    await this.scaledDelay(BASE_ANIM_MS * 0.3);
+    label.remove();
+  }
+
   // ── Kraft display ─────────────────────────────────────────────────────
 
   private updateKraftDisplay(kraftSum: number, target: number): void {
-    this.kraftDisplayEl.textContent = `W_C = ${kraftSum}  /  W_T = ${target}`;
+    this.kraftDisplayEl.innerHTML =
+      `<span class="kraft-wc">W<sub>C</sub> = ${kraftSum}</span><br><span class="kraft-wt">W<sub>T</sub> = ${target}</span>`;
     this.kraftDisplayEl.style.opacity = '1';
   }
 
@@ -266,9 +333,8 @@ export class DepthLimitingDemo {
 
     this.kraftDisplayEl = document.createElement('div');
     this.kraftDisplayEl.className = 'depth-kraft-display';
-    this.kraftDisplayEl.textContent = 'W_C = 0  /  W_T = 0';
+    this.kraftDisplayEl.innerHTML = '<span class="kraft-wc">W<sub>C</sub> = 0</span><br><span class="kraft-wt">W<sub>T</sub> = 0</span>';
     this.kraftDisplayEl.style.opacity = '0';
-    this.pseudoEl.appendChild(this.kraftDisplayEl);
 
     // Table
     const tableWrap = document.createElement('div');
@@ -320,11 +386,17 @@ export class DepthLimitingDemo {
 
     tableWrap.appendChild(tbody);
 
-    // Side-by-side container for pseudocode + table
+    // Table + kraft display column
+    const tableCol = document.createElement('div');
+    tableCol.className = 'depth-table-col';
+    tableCol.appendChild(tableWrap);
+    tableCol.appendChild(this.kraftDisplayEl);
+
+    // Side-by-side container for pseudocode + table column
     const bodyRow = document.createElement('div');
     bodyRow.className = 'depth-body-row';
     bodyRow.appendChild(this.pseudoEl);
-    bodyRow.appendChild(tableWrap);
+    bodyRow.appendChild(tableCol);
     this.depthPanelEl.appendChild(bodyRow);
   }
 
@@ -360,51 +432,119 @@ export class DepthLimitingDemo {
     for (const step of steps) {
       if (step.kind === 'clamp') {
         const s = step;
-        actions.push({
-          forward: async () => {
-            this.setPseudoHighlight(['clamp-for', 'clamp-set']);
-            // Update all rows at once, highlight any that changed
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              const bitsCell = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cell-bits');
-              if (bitsCell) {
-                bitsCell.textContent = String(s.newBits[i]);
-                if (s.oldBits[i] !== s.newBits[i]) {
-                  bitsCell.classList.add('depth-bits-changed');
-                  this.tableRowEls[i].classList.add('canon-row-active');
+        // for...while: iterate rows that need clamping, break at first that doesn't
+        for (let ri = 0; ri < s.oldBits.length; ri++) {
+          const rowIdx = ri;
+          const changed = s.oldBits[rowIdx] !== s.newBits[rowIdx];
+
+          if (!changed) {
+            // While condition false — flash clamp-for and break
+            actions.push({
+              forward: async () => {
+                for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+                for (const el of this.tableRowEls) {
+                  const bc = el.querySelector<HTMLElement>('.canon-cell-bits');
+                  if (bc) bc.classList.remove('depth-bits-changed');
                 }
+                this.tableRowEls[rowIdx].classList.add('canon-row-active');
+                this.setPseudoHighlight(['clamp-for']);
+                await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
+                this.tableRowEls[rowIdx].classList.remove('canon-row-active');
+              },
+              backward: async () => {
+                this.tableRowEls[rowIdx].classList.remove('canon-row-active');
+                if (rowIdx === 0) {
+                  for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+                  this.setPseudoHighlight(['sort-line']);
+                } else {
+                  this.tableRowEls[rowIdx - 1].classList.add('canon-row-active');
+                  this.setPseudoHighlight(['clamp-set']);
+                }
+              },
+            });
+            break; // for...while stops here
+          }
+
+          // Row needs clamping: clamp-for then clamp-set
+          actions.push({
+            forward: async () => {
+              for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+              for (const el of this.tableRowEls) {
+                const bc = el.querySelector<HTMLElement>('.canon-cell-bits');
+                if (bc) bc.classList.remove('depth-bits-changed');
               }
-            }
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              this.tableRowEls[i].classList.remove('canon-row-active');
-              const bitsCell = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cell-bits');
-              if (bitsCell) bitsCell.classList.remove('depth-bits-changed');
-            }
-          },
-          backward: async () => {
-            for (let i = 0; i < this.tableRowEls.length; i++) {
-              this.tableRowEls[i].classList.remove('canon-row-active');
-              const bitsCell = this.tableRowEls[i].querySelector<HTMLElement>('.canon-cell-bits');
+              this.tableRowEls[rowIdx].classList.add('canon-row-active');
+              this.setPseudoHighlight(['clamp-for']);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
+            },
+            backward: async () => {
+              this.tableRowEls[rowIdx].classList.remove('canon-row-active');
+              if (rowIdx === 0) {
+                for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+                this.setPseudoHighlight(['sort-line']);
+              } else {
+                this.tableRowEls[rowIdx - 1].classList.add('canon-row-active');
+                this.setPseudoHighlight(['clamp-set']);
+              }
+            },
+          });
+
+          actions.push({
+            forward: async () => {
+              this.setPseudoHighlight(['clamp-set']);
+              await this.flyLabel(`=${this.maxDepth}`, 'clamp-set', rowIdx);
+              const bitsCell = this.tableRowEls[rowIdx].querySelector<HTMLElement>('.canon-cell-bits');
               if (bitsCell) {
-                bitsCell.textContent = String(s.oldBits[i]);
+                bitsCell.textContent = String(s.newBits[rowIdx]);
+                bitsCell.classList.add('depth-bits-changed');
+              }
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
+              // Clean up on last row if no break follows
+              if (rowIdx === s.oldBits.length - 1) {
+                this.tableRowEls[rowIdx].classList.remove('canon-row-active');
+                if (bitsCell) bitsCell.classList.remove('depth-bits-changed');
+              }
+            },
+            backward: async () => {
+              const bitsCell = this.tableRowEls[rowIdx].querySelector<HTMLElement>('.canon-cell-bits');
+              if (bitsCell) {
+                bitsCell.textContent = String(s.oldBits[rowIdx]);
                 bitsCell.classList.remove('depth-bits-changed');
               }
-            }
-            this.setPseudoHighlight(['sort-line']);
-          },
-        });
+              this.tableRowEls[rowIdx].classList.add('canon-row-active');
+              this.setPseudoHighlight(['clamp-for']);
+            },
+          });
+        }
 
       } else if (step.kind === 'kraft-init') {
         const s = step;
+        // Action 1: weight lambda + W_T initialization
         actions.push({
           forward: async () => {
-            this.setPseudoHighlight(['w-lambda', 'target-line', 'kraft-init']);
-            this.updateKraftDisplay(s.kraftSum, s.target);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+            this.setPseudoHighlight(['w-lambda', 'target-line']);
+            this.kraftDisplayEl.style.opacity = '1';
+            this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ?</span>`;
+            await this.flyToKraft(`=${s.target}`, 'target-line', 'wt');
+            this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ${s.target}</span>`;
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.kraftDisplayEl.style.opacity = '0';
-            this.setPseudoHighlight(['clamp-for', 'clamp-set']);
+            this.setPseudoHighlight(['clamp-set']);
+          },
+        });
+        // Action 2: W_C initialization
+        actions.push({
+          forward: async () => {
+            this.setPseudoHighlight(['kraft-init']);
+            await this.flyToKraft(`=${s.kraftSum}`, 'kraft-init');
+            this.updateKraftDisplay(s.kraftSum, s.target);
+            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
+          },
+          backward: async () => {
+            this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ?</span>`;
+            this.setPseudoHighlight(['w-lambda', 'target-line']);
           },
         });
 
@@ -491,10 +631,14 @@ export class DepthLimitingDemo {
           // for-while condition false — loop ends, just flash the for line
           actions.push({
             forward: async () => {
+              for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               this.setPseudoHighlight(['demote-for']);
               await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
             },
             backward: async () => {
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
               if (isFirstDemote) {
                 this.setPseudoHighlight(['w-lambda', 'target-line', 'kraft-init']);
               } else {
@@ -503,9 +647,11 @@ export class DepthLimitingDemo {
             },
           });
         } else if (s.applied) {
+          // Action 1: for + while check + ++row.bits with fly animation
           actions.push({
             forward: async () => {
               if (s.isFirstIteration) {
+                for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
                 this.setPseudoHighlight(['demote-for']);
                 this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
                 await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
@@ -513,16 +659,15 @@ export class DepthLimitingDemo {
               this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               this.setPseudoHighlight(['demote-while']);
               await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
-              this.setPseudoHighlight(['demote-kraft', 'demote-inc']);
+              this.setPseudoHighlight(['demote-inc']);
+              await this.flyLabel('+1', 'demote-inc', s.rowIndex);
               const bitsCell = this.tableRowEls[s.rowIndex].querySelector<HTMLElement>('.canon-cell-bits');
               if (bitsCell) {
                 bitsCell.textContent = String(s.newBits);
                 bitsCell.classList.add('depth-bits-changed');
               }
-              this.updateKraftDisplay(s.kraftAfter, s.target);
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
               if (bitsCell) bitsCell.classList.remove('depth-bits-changed');
-              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
             },
             backward: async () => {
               this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
@@ -539,10 +684,27 @@ export class DepthLimitingDemo {
               }
             },
           });
+          // Action 2: W_C update with flying gold pill
+          actions.push({
+            forward: async () => {
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
+              this.setPseudoHighlight(['demote-kraft']);
+              const delta = s.kraftAfter - s.kraftBefore;
+              await this.flyToKraft(`${delta > 0 ? '+' : ''}${delta}`, 'demote-kraft');
+              this.updateKraftDisplay(s.kraftAfter, s.target);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
+            },
+            backward: async () => {
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
+              this.setPseudoHighlight(['demote-inc']);
+            },
+          });
         } else {
           // Not applied, not broke: while condition false, move to next row
           actions.push({
             forward: async () => {
+              for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
               this.setPseudoHighlight(['demote-for']);
               this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
@@ -581,10 +743,14 @@ export class DepthLimitingDemo {
           // for-while condition false — loop ends, just flash the for line
           actions.push({
             forward: async () => {
+              for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               this.setPseudoHighlight(['promote-for']);
               await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
             },
             backward: async () => {
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
               if (isFirstPromote) {
                 backToDemote();
               } else {
@@ -593,9 +759,11 @@ export class DepthLimitingDemo {
             },
           });
         } else if (s.applied) {
+          // Action 1: for + while check + --row.bits with fly animation
           actions.push({
             forward: async () => {
               if (s.isFirstIteration) {
+                for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
                 this.setPseudoHighlight(['promote-for']);
                 this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
                 await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
@@ -603,16 +771,15 @@ export class DepthLimitingDemo {
               this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               this.setPseudoHighlight(['promote-while']);
               await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
-              this.setPseudoHighlight(['promote-kraft', 'promote-dec']);
+              this.setPseudoHighlight(['promote-dec']);
+              await this.flyLabel('-1', 'promote-dec', s.rowIndex);
               const bitsCell = this.tableRowEls[s.rowIndex].querySelector<HTMLElement>('.canon-cell-bits');
               if (bitsCell) {
                 bitsCell.textContent = String(s.newBits);
                 bitsCell.classList.add('depth-bits-changed');
               }
-              this.updateKraftDisplay(s.kraftAfter, s.target);
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
               if (bitsCell) bitsCell.classList.remove('depth-bits-changed');
-              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
             },
             backward: async () => {
               this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
@@ -629,10 +796,27 @@ export class DepthLimitingDemo {
               }
             },
           });
+          // Action 2: W_C update with flying gold pill
+          actions.push({
+            forward: async () => {
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
+              this.setPseudoHighlight(['promote-kraft']);
+              const delta = s.kraftAfter - s.kraftBefore;
+              await this.flyToKraft(`${delta > 0 ? '+' : ''}${delta}`, 'promote-kraft');
+              this.updateKraftDisplay(s.kraftAfter, s.target);
+              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
+              this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
+            },
+            backward: async () => {
+              this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
+              this.setPseudoHighlight(['promote-dec']);
+            },
+          });
         } else {
           // Not applied, not broke: while condition false, move to next row
           actions.push({
             forward: async () => {
+              for (const el of this.tableRowEls) el.classList.remove('canon-row-active');
               this.setPseudoHighlight(['promote-for']);
               this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
               await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
