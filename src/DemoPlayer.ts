@@ -2,7 +2,9 @@ import { HuffmanDemo } from './demos/01-huffman-tree-construction/HuffmanDemo';
 import { HuffmanEncodingDemo } from './demos/02-naive-huffman-encoding/HuffmanEncodingDemo';
 import { HuffmanDecodingDemo } from './demos/03-naive-huffman-decoding/HuffmanDecodingDemo';
 import { CanonicalizationDemo } from './demos/04-huffman-canonicalization/CanonicalizationDemo';
+import { DepthLimitingDemo } from './demos/05-huffman-depth-limiting/DepthLimitingDemo';
 import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAlgorithm';
+import { buildCanonSteps } from './demos/04-huffman-canonicalization/CanonicalizationAlgorithm';
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
   { symbol: 'A', freq: 5 },
@@ -17,6 +19,7 @@ const DEMO_TITLES = [
   'Naive Huffman Encoding',
   'Naive Huffman Decoding',
   'Huffman Canonicalization',
+  'Huffman Depth Limiting',
 ];
 
 interface IDemo {
@@ -30,6 +33,10 @@ export class DemoPlayer {
   private chipsEl!: HTMLDivElement;
   private inputStringEl!: HTMLInputElement;
   private inputStringUserModified = false;
+  private depthSliderEl!: HTMLInputElement;
+  private depthValueEl!: HTMLSpanElement;
+  private depthSliderUserModified = false;
+  private depthLimitingDemo!: DepthLimitingDemo;
 
   // ── Demo navigation state ──────────────────────────────────────────────────
   private demos: IDemo[] = [];
@@ -87,11 +94,14 @@ export class DemoPlayer {
     const slide2 = this.addSlide();
     const slide3 = this.addSlide();
     const slide4 = this.addSlide();
+    const slide5 = this.addSlide();
 
     this.demos.push(new HuffmanDemo(slide1));
     this.demos.push(new HuffmanEncodingDemo(slide2));
     this.demos.push(new HuffmanDecodingDemo(slide3));
     this.demos.push(new CanonicalizationDemo(slide4));
+    this.depthLimitingDemo = new DepthLimitingDemo(slide5);
+    this.demos.push(this.depthLimitingDemo);
 
     this.updateNavUI();
     void this.loadWordList();
@@ -147,6 +157,36 @@ export class DemoPlayer {
     this.inputStringEl.placeholder = val;
     if (!this.inputStringUserModified) {
       this.inputStringEl.value = val;
+    }
+    this.updateDepthSlider();
+  }
+
+  private updateDepthSlider(): void {
+    if (!this.depthSliderEl || !this.chipsEl) return;
+    const symbols = this.readSymbolChips(this.chipsEl);
+    if (this.validateInputs(symbols) !== null) return;
+
+    try {
+      const canonResult = buildCanonSteps(symbols);
+      const treeDepth = Math.max(...canonResult.rows.map(r => r.numBits));
+      const minDepth = Math.max(Math.ceil(Math.log2(symbols.length)), 1);
+
+      this.depthSliderEl.min = String(minDepth);
+      this.depthSliderEl.max = String(treeDepth);
+
+      let val: number;
+      if (this.depthSliderUserModified) {
+        // Clamp current value to new bounds
+        val = parseInt(this.depthSliderEl.value, 10);
+        val = Math.max(minDepth, Math.min(treeDepth, val));
+      } else {
+        // Default to tree depth - 1
+        val = Math.max(treeDepth - 1, minDepth);
+      }
+      this.depthSliderEl.value = String(val);
+      this.depthValueEl.textContent = String(val);
+    } catch {
+      // Invalid inputs — leave slider as-is
     }
   }
 
@@ -265,6 +305,8 @@ export class DemoPlayer {
       }
       errorEl.hidden = true;
       const inputString = inputStringEl.value;
+      const maxDepth = parseInt(this.depthSliderEl.value, 10);
+      this.depthLimitingDemo.setMaxDepth(maxDepth);
       for (const demo of this.demos) {
         demo.start(inputs, inputString);
       }
@@ -276,9 +318,39 @@ export class DemoPlayer {
     row2.appendChild(startBtn);
     row2.appendChild(errorEl);
 
+    // ── Row 3: Max Depth ──────────────────────────────────────────────
+    const row3 = document.createElement('div');
+    row3.className = 'input-row';
+
+    const row3Label = document.createElement('span');
+    row3Label.className = 'input-row-label';
+    row3Label.textContent = 'Max Depth';
+
+    this.depthSliderEl = document.createElement('input');
+    this.depthSliderEl.type = 'range';
+    this.depthSliderEl.className = 'depth-slider';
+    this.depthSliderEl.min = '1';
+    this.depthSliderEl.max = '4';
+    this.depthSliderEl.value = '3';
+    this.depthSliderEl.addEventListener('input', () => {
+      this.depthSliderUserModified = true;
+      this.depthValueEl.textContent = this.depthSliderEl.value;
+    });
+
+    this.depthValueEl = document.createElement('span');
+    this.depthValueEl.className = 'depth-slider-value';
+    this.depthValueEl.textContent = '3';
+
+    row3.appendChild(row3Label);
+    row3.appendChild(this.depthSliderEl);
+    row3.appendChild(this.depthValueEl);
+
     strip.appendChild(row1);
     strip.appendChild(row2);
+    strip.appendChild(row3);
     parentEl.appendChild(strip);
+
+    this.updateDepthSlider();
   }
 
   private createSymbolChip(symbol: string, freq: number, container: HTMLElement): HTMLElement {
@@ -303,6 +375,7 @@ export class DemoPlayer {
     freqInput.placeholder = '1';
     freqInput.value = freq > 0 ? String(freq) : '';
     freqInput.min = '1';
+    freqInput.addEventListener('input', () => this.updateDepthSlider());
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
