@@ -1,10 +1,22 @@
 import { TreeRenderer } from '../../tree/TreeRenderer';
+import type { Tree } from '../../tree/BinaryTree';
 import { buildHuffmanSnapshots } from '../01-huffman-tree-construction/HuffmanAlgorithm';
 import type { SymbolInput } from '../01-huffman-tree-construction/HuffmanAlgorithm';
 
+function stripCounts(tree: Tree): Tree {
+  const newNodes = new Map(
+    [...tree.nodes.entries()].map(([id, node]) => {
+      const isLeaf = !node.leftId && !node.rightId;
+      const label = isLeaf ? node.label.split(':')[0] : '';
+      return [id, { ...node, label }];
+    })
+  );
+  return { ...tree, nodes: newNodes };
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-export class HuffmanTreeDemo {
+export class HuffmanEncodingDemo {
   private svgEl: SVGSVGElement;
   private renderer: TreeRenderer;
 
@@ -33,6 +45,6 @@ export class HuffmanTreeDemo {
     this.renderer = new TreeRenderer({ svgEl: this.svgEl });
     this.svgEl.style.display = '';
     // Pass undefined for sections to suppress Q_L / Q_T labels on the static tree
-    this.renderer.update(last.tree, undefined);
+    this.renderer.update(stripCounts(last.tree), undefined);
   }
 }

@@ -1,5 +1,5 @@
 import { HuffmanDemo } from './demos/01-huffman-tree-construction/HuffmanDemo';
-import { HuffmanTreeDemo } from './demos/02-huffman-tree/HuffmanTreeDemo';
+import { HuffmanEncodingDemo } from './demos/02-huffman-encoding/HuffmanEncodingDemo';
 import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAlgorithm';
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
@@ -12,7 +12,7 @@ const DEFAULT_SYMBOLS: SymbolInput[] = [
 
 const DEMO_TITLES = [
   'Tree Construction',
-  'Final Tree',
+  'Huffman Encoding',
 ];
 
 interface IDemo {
@@ -83,7 +83,7 @@ export class DemoPlayer {
     const slide2 = this.addSlide();
 
     this.demos.push(new HuffmanDemo(slide1));
-    this.demos.push(new HuffmanTreeDemo(slide2));
+    this.demos.push(new HuffmanEncodingDemo(slide2));
 
     this.updateNavUI();
     void this.loadWordList();
