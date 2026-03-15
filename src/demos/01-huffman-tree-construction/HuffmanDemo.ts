@@ -3,16 +3,10 @@ import { TreeRenderer } from '../../tree/TreeRenderer';
 import { buildHuffmanSnapshots } from './HuffmanAlgorithm';
 import type { SymbolInput, HuffmanSnapshot, SelectionStep } from './HuffmanAlgorithm';
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
 const BASE_STEP_MS = 1200; // how long each pseudocode phase is shown at 1× speed
 const BASE_ANIM_MS = 500;  // CSS transition duration for node moves at 1× speed
-
-const DEFAULT_SYMBOLS: SymbolInput[] = [
-  { symbol: 'A', freq: 5 },
-  { symbol: 'B', freq: 3 },
-  { symbol: 'C', freq: 2 },
-  { symbol: 'D', freq: 1 },
-  { symbol: 'E', freq: 1 },
-];
 
 // ── Pseudocode ───────────────────────────────────────────────────────────────
 
@@ -80,8 +74,6 @@ function getPseudoLines(snap: HuffmanSnapshot, stepIndex: number): string[] {
 
 // ── Action types ─────────────────────────────────────────────────────────────
 
-// An Action has a forward step and its exact inverse.
-// Next runs actions forward in order; Prev runs them backward in reverse order.
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
@@ -90,21 +82,18 @@ interface Action {
 // ── Demo class ───────────────────────────────────────────────────────────────
 
 export class HuffmanDemo {
-  private inputEl: HTMLElement;
   private controlsEl: HTMLElement;
-  private svgEl: SVGSVGElement;
   private pseudoEl: HTMLElement;
+  private svgEl: SVGSVGElement;
   private renderer: TreeRenderer;
 
   private snapshots: HuffmanSnapshot[] = [];
   private currentStep = 0;
 
-  // Actions not yet run (Next consumes from front)
   private remainingActions: Action[] = [];
-  // Actions already run (Prev consumes from back)
   private completedActions: Action[] = [];
   private isAnimating = false;
-  private isPlaying = true;
+  private isPlaying = false;
   private speedMultiplier = 1;
 
   private scaledDelay(baseMs: number): Promise<void> {
@@ -125,16 +114,32 @@ export class HuffmanDemo {
   private playBtn!: HTMLButtonElement;
   private nextBtn!: HTMLButtonElement;
 
-  constructor(inputEl: HTMLElement, controlsEl: HTMLElement, svgEl: SVGSVGElement, pseudoEl: HTMLElement) {
-    this.inputEl = inputEl;
-    this.controlsEl = controlsEl;
-    this.svgEl = svgEl;
-    this.pseudoEl = pseudoEl;
-    this.renderer = new TreeRenderer({ svgEl });
-    this.svgEl.style.display = 'none';
-    this.buildPseudocodePanel();
+  constructor(containerEl: HTMLElement) {
+    // Controls row (created fresh on each start() call, placeholder div here)
+    this.controlsEl = document.createElement('div');
+    containerEl.appendChild(this.controlsEl);
+
+    // Viz area: [pseudo | viz-left > svg]
+    const vizArea = document.createElement('div');
+    vizArea.className = 'viz-area';
+    containerEl.appendChild(vizArea);
+
+    this.pseudoEl = document.createElement('div');
+    this.pseudoEl.className = 'pseudo-panel';
     this.pseudoEl.style.display = 'none';
-    this.buildInputStrip();
+    vizArea.appendChild(this.pseudoEl);
+
+    const vizLeft = document.createElement('div');
+    vizLeft.className = 'viz-left';
+    vizArea.appendChild(vizLeft);
+
+    this.svgEl = document.createElementNS(SVG_NS, 'svg') as unknown as SVGSVGElement;
+    this.svgEl.setAttribute('class', 'tree-svg');
+    this.svgEl.style.display = 'none';
+    vizLeft.appendChild(this.svgEl);
+
+    this.renderer = new TreeRenderer({ svgEl: this.svgEl });
+    this.buildPseudocodePanel();
   }
 
   // ── Pseudocode panel ────────────────────────────────────────────────────────
@@ -167,7 +172,6 @@ export class HuffmanDemo {
       div.classList.toggle('active', id !== '' && active.has(id));
       div.classList.remove('active-first', 'active-last');
     }
-    // Mark first/last of each contiguous active group for bar-shaped rounding
     for (let i = 0; i < lines.length; i++) {
       if (!lines[i].classList.contains('active')) continue;
       if (!lines[i - 1]?.classList.contains('active')) lines[i].classList.add('active-first');
@@ -181,7 +185,6 @@ export class HuffmanDemo {
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
-    // playBtn stays interactive so the user can pause mid-animation
     await fn();
     this.isAnimating = false;
     this.updateNavButtons();
@@ -216,6 +219,13 @@ export class HuffmanDemo {
     this.isPlaying = !this.isPlaying;
     this.updateNavButtons();
     if (this.isPlaying) void this.playLoop();
+  }
+
+  pause(): void {
+    if (this.isPlaying) {
+      this.isPlaying = false;
+      if (this.prevBtn) this.updateNavButtons();
+    }
   }
 
   private async playLoop(): Promise<void> {
@@ -256,14 +266,11 @@ export class HuffmanDemo {
     }
   }
 
-  // Advance forward to a new snapshot, building a phase queue for merge steps.
   private async goToStep(index: number, forward: boolean): Promise<void> {
     this.currentStep = Math.max(0, Math.min(index, this.snapshots.length - 1));
     const snap = this.snapshots[this.currentStep];
 
-
     if (forward && snap.selectionSteps) {
-      // Merge step: build bidirectional phase queue, run first phase
       const phases = this.buildActions(snap);
       this.remainingActions = phases;
       this.completedActions = [];
@@ -271,7 +278,6 @@ export class HuffmanDemo {
       await this.runPhase(first.forward);
       this.completedActions.push(first);
     } else {
-      // Non-merge step: render and hold so the step is visible during auto-play
       this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
       this.remainingActions = [];
       this.completedActions = [];
@@ -282,16 +288,12 @@ export class HuffmanDemo {
     }
   }
 
-  // Jump to a snapshot in its completed state (used by Prev when crossing snapshots).
-  // Reconstructs completedActions so Prev can continue undoing into it.
   private async goToCompletedStep(index: number): Promise<void> {
     if (index < 0) return;
     this.currentStep = index;
     const snap = this.snapshots[this.currentStep];
 
     this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
-
-    // Reconstruct all phases as "completed" so Prev can undo them in reverse
     this.completedActions = snap.selectionSteps ? this.buildActions(snap) : [];
     this.remainingActions = [];
 
@@ -301,20 +303,14 @@ export class HuffmanDemo {
     });
   }
 
-  // Build the ordered Action list for one forward merge step.
-  // Must be called with this.currentStep already set to the merge snapshot's index.
   private buildActions(snap: HuffmanSnapshot): Action[] {
     const prevIndex = this.currentStep - 1;
     const prevSnap = this.snapshots[prevIndex];
-    const prevPseudoCompleted = prevSnap
-      ? getPseudoLines(prevSnap, prevIndex)
-      : [];
+    const prevPseudoCompleted = prevSnap ? getPseudoLines(prevSnap, prevIndex) : [];
 
     const actions: Action[] = [];
-    // Track pseudocode state as actions are built, so each backward can restore the prior state.
     let pseudoState = prevPseudoCompleted;
 
-    // ── Action: while condition ─────────────────────────────────────────────
     const p0Before = pseudoState;
     actions.push({
       forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
@@ -322,7 +318,6 @@ export class HuffmanDemo {
     });
     pseudoState = ['while'];
 
-    // ── Actions: two dequeue selections ────────────────────────────────────
     for (let si = 0; si < snap.selectionSteps!.length; si++) {
       const step = snap.selectionSteps![si];
       const deqLine = si === 0 ? 'deq-a' : 'deq-b';
@@ -330,7 +325,6 @@ export class HuffmanDemo {
         .filter((id): id is string => !!id);
 
       if (candidates.length >= 2) {
-        // Comparison phase (blue highlight + flying label)
         const cmpBefore = pseudoState;
         const cmpLines = [deqLine, ...deqCompareLines(step)];
         actions.push({
@@ -345,7 +339,6 @@ export class HuffmanDemo {
             this.renderer.setComparing(candidates, false);
           },
           backward: async () => {
-            // Exact inverse of forward (steps 4r, 3r, 2r, 1r):
             this.renderer.setComparing(candidates, true);
             await this.renderer.showComparisonAnimationReverse(
               step.q1CandidateId!, step.q2CandidateId!,
@@ -359,7 +352,6 @@ export class HuffmanDemo {
         pseudoState = cmpLines;
       }
 
-      // Selection phase (amber highlight)
       const selBefore = pseudoState;
       const selLines = [deqLine, ...deqSelectedLines(step)];
       const selectedId = step.selectedId;
@@ -370,7 +362,6 @@ export class HuffmanDemo {
           await this.scaledDelay(BASE_STEP_MS);
         },
         backward: async () => {
-          // Exact inverse of forward (steps 2r, 1r):
           this.renderer.setHighlight([selectedId], false);
           this.updatePseudoHighlight(selBefore);
         },
@@ -378,7 +369,6 @@ export class HuffmanDemo {
       pseudoState = selLines;
     }
 
-    // ── Action: node creation + merge animation + sum label ────────────────
     const mergeLines = ['node-new', 'node-freq', 'node-lr', 'q2-app'];
     const mergeBefore = pseudoState;
     const mergingIds = [...snap.mergingIds!] as [string, string];
@@ -397,8 +387,6 @@ export class HuffmanDemo {
         }
       },
       backward: async () => {
-        // Exact inverse of forward (steps 5r, 4r, 3r, 2r, 1r):
-        // 5r: play sum animation in reverse — must run before renderer.update removes the parent
         if (snap.mergingFreqs && snap.mergedParentId) {
           await this.renderer.showSumAnimationReverse(
             mergingIds[0], mergingIds[1],
@@ -406,24 +394,18 @@ export class HuffmanDemo {
             snap.mergedParentId,
           );
         }
-        // 4r: restore amber highlights on children
         this.renderer.setHighlight(mergingIds, true);
-        // 3r+2r: revert to previous tree and wait for node transitions
         this.renderer.update(prevSnap.tree, prevSnap.sections);
         await this.scaledDelay(BASE_ANIM_MS);
-        // 1r: restore pseudocode
         this.updatePseudoHighlight(mergeBefore);
       },
     });
 
     if (snap.isComplete) {
-      // ── Action: while condition exits (loop terminates) ─────────────────
       actions.push({
         forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
         backward: async () => { this.updatePseudoHighlight(mergeLines); },
       });
-
-      // ── Action: return ──────────────────────────────────────────────────
       actions.push({
         forward: async () => { this.updatePseudoHighlight(['return']); await this.scaledDelay(BASE_STEP_MS); },
         backward: async () => { this.updatePseudoHighlight(['while']); },
@@ -433,133 +415,16 @@ export class HuffmanDemo {
     return actions;
   }
 
-  // ── Input strip (persistent) ─────────────────────────────────────────────────
+  // ── Start ────────────────────────────────────────────────────────────────────
 
-  private nextUnusedSymbol(chips: HTMLElement): string {
-    const used = new Set(
-      Array.from(chips.querySelectorAll('.chip-sym'))
-        .map(el => (el as HTMLInputElement).value.trim().toUpperCase())
-    );
-    for (let i = 0; i < 26; i++) {
-      const ch = String.fromCharCode(65 + i);
-      if (!used.has(ch)) return ch;
-    }
-    return '';
-  }
-
-  private buildInputStrip(): void {
-    this.inputEl.innerHTML = '';
-
-    const strip = document.createElement('div');
-    strip.className = 'input-strip';
-
-    const chips = document.createElement('div');
-    chips.className = 'symbol-chips';
-    for (const { symbol, freq } of DEFAULT_SYMBOLS) {
-      chips.appendChild(this.createSymbolChip(symbol, freq, chips));
-    }
-
-    const errorEl = document.createElement('span');
-    errorEl.className = 'input-error';
-    errorEl.hidden = true;
-
-    const addBtn = document.createElement('button');
-    addBtn.className = 'btn-secondary';
-    addBtn.textContent = '+ Add';
-    addBtn.addEventListener('click', () => {
-      const chip = this.createSymbolChip(this.nextUnusedSymbol(chips), 1, chips);
-      chips.appendChild(chip);
-      (chip.querySelector('.chip-sym') as HTMLInputElement).focus();
-    });
-
-    const startBtn = document.createElement('button');
-    startBtn.className = 'btn-primary';
-    startBtn.textContent = 'Visualize →';
-    startBtn.addEventListener('click', () => {
-      const inputs = this.readSymbolChips(chips);
-      const error = this.validateInputs(inputs);
-      if (error) {
-        errorEl.textContent = error;
-        errorEl.hidden = false;
-        return;
-      }
-      errorEl.hidden = true;
-      this.startVisualization(inputs);
-    });
-
-    strip.appendChild(chips);
-    strip.appendChild(addBtn);
-    strip.appendChild(startBtn);
-    strip.appendChild(errorEl);
-    this.inputEl.appendChild(strip);
-  }
-
-  private createSymbolChip(symbol: string, freq: number, container: HTMLElement): HTMLElement {
-    const chip = document.createElement('span');
-    chip.className = 'sym-chip';
-
-    const symInput = document.createElement('input');
-    symInput.type = 'text';
-    symInput.className = 'chip-sym';
-    symInput.placeholder = 'A';
-    symInput.value = symbol;
-    symInput.maxLength = 1;
-
-    const sep = document.createElement('span');
-    sep.className = 'chip-sep';
-    sep.textContent = ':';
-
-    const freqInput = document.createElement('input');
-    freqInput.type = 'number';
-    freqInput.className = 'chip-freq';
-    freqInput.placeholder = '1';
-    freqInput.value = freq > 0 ? String(freq) : '';
-    freqInput.min = '1';
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'remove-btn';
-    removeBtn.textContent = '×';
-    removeBtn.setAttribute('aria-label', 'Remove');
-    removeBtn.addEventListener('click', () => {
-      if (container.querySelectorAll('.sym-chip').length > 1) chip.remove();
-    });
-
-    chip.appendChild(symInput);
-    chip.appendChild(sep);
-    chip.appendChild(freqInput);
-    chip.appendChild(removeBtn);
-    return chip;
-  }
-
-  private readSymbolChips(container: HTMLElement): SymbolInput[] {
-    return Array.from(container.querySelectorAll('.sym-chip')).map(chip => ({
-      symbol: (chip.querySelector('.chip-sym') as HTMLInputElement).value.trim(),
-      freq: parseInt((chip.querySelector('.chip-freq') as HTMLInputElement).value, 10),
-    }));
-  }
-
-  private validateInputs(inputs: SymbolInput[]): string | null {
-    if (inputs.length < 2) return 'Enter at least 2 symbols.';
-    const seen = new Set<string>();
-    for (const { symbol, freq } of inputs) {
-      if (!symbol) return 'Symbol names cannot be empty.';
-      if (seen.has(symbol)) return `Duplicate symbol: "${symbol}"`;
-      seen.add(symbol);
-      if (!Number.isInteger(freq) || freq < 1) return `Count for "${symbol}" must be a positive integer.`;
-    }
-    return null;
-  }
-
-  // ── Viz phase ───────────────────────────────────────────────────────────────
-
-  private startVisualization(inputs: SymbolInput[]): void {
+  start(inputs: SymbolInput[], _inputString: string): void {
     this.snapshots = buildHuffmanSnapshots(inputs);
     this.currentStep = 0;
     this.remainingActions = [];
     this.completedActions = [];
     this.isPlaying = true;
 
+    // Rebuild controls
     this.controlsEl.innerHTML = '';
     while (this.svgEl.firstChild) this.svgEl.firstChild.remove();
     this.renderer = new TreeRenderer({
@@ -605,9 +470,9 @@ export class HuffmanDemo {
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = String(Math.log2(0.2));
-    slider.max = String(Math.log2(2));
+    slider.max = String(Math.log2(4));
     slider.step = '0.01';
-    slider.value = '0'; // log2(1) = 0 → 1× speed
+    slider.value = '0';
     slider.className = 'speed-slider';
     slider.addEventListener('input', () => {
       this.speedMultiplier = Math.pow(2, parseFloat(slider.value));

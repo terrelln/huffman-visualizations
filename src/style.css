@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -15,15 +17,110 @@ body {
   padding: 32px 24px;
 }
 
+/* ── Demo wrapper (grid: title + chevrons + viewport) ────────────────────── */
+
+/*
+  Grid layout:
+    col 1    col 2 (1fr)   col 3
+  row 1: [     ] [  title  ] [     ]
+  row 2: [‹ btn] [ viewport] [› btn]
+
+  Chevrons occupy only row 2, so their height = viewport height → ‹/› centers
+  relative to demo content, not the title.
+*/
+
+.demo-wrapper {
+  display: grid;
+  grid-template-columns: 2rem 1fr 2rem;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+}
+
+.demo-nav {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-bottom: 12px;
+}
+
+.demo-nav-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #495057;
+}
+
+.demo-viewport {
+  grid-column: 2;
+  grid-row: 2;
+  overflow-x: clip;   /* clips slides during swipe without creating a scroll container */
+  overflow-y: visible; /* tree SVG can paint below; viewport height stays fixed */
+  min-width: 0;
+  height: 520px;
+}
+
+.demo-slides {
+  display: flex;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  align-items: flex-start;
+}
+
+.demo-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  padding-bottom: 48px;
+}
+
+.demo-nav-chevron {
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: #ced4da;
+  cursor: pointer;
+  transition: color 0.15s;
+  user-select: none;
+  overflow: hidden;
+}
+
+.demo-nav-chevron.chevron-prev {
+  grid-column: 1;
+}
+
+.demo-nav-chevron.chevron-next {
+  grid-column: 3;
+}
+
+.demo-nav-chevron span {
+  font-size: 14rem;
+  line-height: 1;
+  transform: scaleX(0.5);
+  display: block;
+  flex-shrink: 0;
+}
+
+.demo-nav-chevron:hover:not(:disabled) {
+  color: #868e96;
+}
+
+.demo-nav-chevron:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
 /* ── Viz area layout ─────────────────────────────────────────────────────── */
 
-#viz-area {
+.viz-area {
   display: flex;
   align-items: flex-start;
   gap: 24px;
 }
 
-#viz-left {
+.viz-left {
   flex: 1;
   min-width: 0;
   overflow-x: auto;
@@ -76,10 +173,43 @@ button:disabled {
 
 .input-strip {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.input-row {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+}
+
+.input-row-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  width: 8rem;
+  flex-shrink: 0;
+}
+
+.input-string-input {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 0.875rem;
+  padding: 5px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background: #fff;
+  color: #212529;
+  width: 200px;
+  min-width: 0;
+}
+
+.input-string-input:focus {
+  outline: none;
+  border-color: #6c757d;
 }
 
 .symbol-chips {
@@ -237,7 +367,7 @@ button:disabled {
 
 /* ── Pseudocode panel ───────────────────────────────────────────────────── */
 
-#pseudo-panel {
+.pseudo-panel {
   flex-shrink: 0;
   width: 320px;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -269,9 +399,17 @@ button:disabled {
   white-space: nowrap;
 }
 
-.pseudo-line[data-indent="1"] { padding-left: 1.5em; }
-.pseudo-line[data-indent="2"] { padding-left: 3em; }
-.pseudo-line[data-indent="3"] { padding-left: 4.5em; }
+.pseudo-line[data-indent="1"] {
+  padding-left: 1.5em;
+}
+
+.pseudo-line[data-indent="2"] {
+  padding-left: 3em;
+}
+
+.pseudo-line[data-indent="3"] {
+  padding-left: 4.5em;
+}
 
 .pseudo-line.active {
   background: #fff3cd;
@@ -290,14 +428,31 @@ button:disabled {
 }
 
 /* Syntax highlighting */
-.pk { color: #0550ae; font-weight: 600; }  /* keyword */
-.pf { color: #6639ba; }                    /* function */
-.po { color: #953800; }                    /* operator / math symbol */
-.pc { color: #6a737d; }                    /* comment / annotation */
+.pk {
+  color: #0550ae;
+  font-weight: 600;
+}
+
+/* keyword */
+.pf {
+  color: #6639ba;
+}
+
+/* function */
+.po {
+  color: #953800;
+}
+
+/* operator / math symbol */
+.pc {
+  color: #6a737d;
+}
+
+/* comment / annotation */
 
 /* ── SVG tree ───────────────────────────────────────────────────────────── */
 
-#tree-svg {
+.tree-svg {
   display: block;
   overflow: visible;
 }
