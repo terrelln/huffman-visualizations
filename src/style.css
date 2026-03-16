@@ -1307,3 +1307,21 @@ button:disabled {
 .decode-display-val {
   font-weight: 700;
 }
+
+/* ── Table-based Decoding (Demo 8) ─────────────────────────────────────── */
+
+.tbl-dec-table-panel {
+  flex-shrink: 0;
+  width: 450px;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+.decode-row.tbl-dec-row-active {
+  background: #fff3cd;
+}
+
+.dec-bit.tbl-dec-bit-lookup {
+  background: #cfe2ff;
+  color: #052c65;
+  border: 1px solid #0d6efd;
+}

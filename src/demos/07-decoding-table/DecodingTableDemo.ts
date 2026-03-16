@@ -266,6 +266,28 @@ export class DecodingTableDemo {
     this.varsBoxEl.style.opacity = '0';
   }
 
+  // ── Scroll helpers ──────────────────────────────────────────────────────
+
+  private scrollDecodeRowIntoView(tableIndex: number): void {
+    const rowEl = this.decodeRowEls[tableIndex];
+    if (!rowEl) return;
+    const scrollContainer = rowEl.closest<HTMLElement>('.decode-table-wrap');
+    if (!scrollContainer) return;
+
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const rowRect = rowEl.getBoundingClientRect();
+
+    if (rowRect.top >= containerRect.top && rowRect.bottom <= containerRect.bottom) return;
+
+    const rowOffsetTop = rowEl.offsetTop;
+    const containerHeight = scrollContainer.clientHeight;
+    const rowHeight = rowEl.offsetHeight;
+    scrollContainer.scrollTo({
+      top: rowOffsetTop - containerHeight / 2 + rowHeight / 2,
+      behavior: 'smooth',
+    });
+  }
+
   // ── Build panel DOM ─────────────────────────────────────────────────────
 
   private buildPanel(sourceRows: DepthRow[], tableSize: number, maxDepth: number): void {
@@ -536,6 +558,7 @@ export class DecodingTableDemo {
           forward: async () => {
             this.setPseudoHighlight(['for-i', 'fill-line']);
             const rowEl = this.decodeRowEls[s.tableIndex];
+            this.scrollDecodeRowIntoView(s.tableIndex);
             rowEl.classList.add('decode-row-active');
             const symCell = rowEl.querySelector<HTMLElement>('.decode-cell-sym');
             const bitsCell = rowEl.querySelector<HTMLElement>('.decode-cell-bits');
