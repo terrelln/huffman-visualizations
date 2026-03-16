@@ -16,6 +16,7 @@ interface TableCharStep {
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export class TableEncodingDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -76,6 +79,32 @@ export class TableEncodingDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   pause(): void {
@@ -133,6 +162,8 @@ export class TableEncodingDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -157,6 +188,7 @@ export class TableEncodingDemo {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const action = this.remainingActions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
       if (await this.runPhase(action.forward)) {
         this.completedActions.push(action);
       }
@@ -314,12 +346,12 @@ export class TableEncodingDemo {
       forward: async () => {
         this.setRowHighlight(step.rowIndex, true);
         this.setCharHighlight(i, true);
-        await this.scaledDelay(BASE_STEP_MS);
       },
       backward: async () => {
         this.setRowHighlight(step.rowIndex, false);
         this.setCharHighlight(i, false);
       },
+      viewDelay: BASE_STEP_MS,
     });
 
     // Single action: highlight all bits, fly the whole codeword as one pill, reveal all bits at once
@@ -335,7 +367,6 @@ export class TableEncodingDemo {
           this.showBit(i, j);
         }
         this.showBrace(i);
-        await this.scaledDelay(BASE_STEP_MS * 0.2);
       },
       backward: async () => {
         for (let j = 0; j < step.codeword.length; j++) {
@@ -344,6 +375,7 @@ export class TableEncodingDemo {
         }
         this.hideBrace(i);
       },
+      viewDelay: BASE_STEP_MS * 0.2,
     });
 
     // Cleanup: clear all highlights for this char (bits stay visible)
@@ -354,7 +386,6 @@ export class TableEncodingDemo {
           this.setBitHighlight(step.rowIndex, j, false);
         }
         this.setCharHighlight(i, false);
-        await this.scaledDelay(BASE_STEP_MS * 0.3);
       },
       backward: async () => {
         this.setRowHighlight(step.rowIndex, true);
@@ -363,6 +394,7 @@ export class TableEncodingDemo {
         }
         this.setCharHighlight(i, true);
       },
+      viewDelay: BASE_STEP_MS * 0.3,
     });
 
     return actions;
@@ -592,7 +624,10 @@ export class TableEncodingDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '\u2190 Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -602,7 +637,13 @@ export class TableEncodingDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next \u2192';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

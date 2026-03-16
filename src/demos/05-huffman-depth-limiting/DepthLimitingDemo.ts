@@ -41,6 +41,7 @@ const PSEUDO_LINES = [
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────
@@ -57,6 +58,8 @@ export class DepthLimitingDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -104,6 +107,32 @@ export class DepthLimitingDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   setMaxDepth(n: number): void {
@@ -164,6 +193,8 @@ export class DepthLimitingDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -188,6 +219,7 @@ export class DepthLimitingDemo {
     if (this.actions.length > 0) {
       const gen = this.generation;
       const action = this.actions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
       await this.runPhase(action.forward);
       if (this.generation === gen) this.completedActions.push(action);
     }
@@ -425,7 +457,6 @@ export class DepthLimitingDemo {
           const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
           if (cwSpan) cwSpan.textContent = '';
         }
-        await this.scaledDelay(BASE_PSEUDO_STEP_MS);
       },
       backward: async () => {
         this.clearPseudoHighlight();
@@ -435,6 +466,7 @@ export class DepthLimitingDemo {
           if (cwSpan) cwSpan.textContent = initialCodewords[i];
         }
       },
+      viewDelay: BASE_PSEUDO_STEP_MS,
     });
 
     for (const step of steps) {
@@ -483,7 +515,6 @@ export class DepthLimitingDemo {
               }
               this.tableRowEls[rowIdx].classList.add('canon-row-active');
               this.setPseudoHighlight(['clamp-for']);
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.5);
             },
             backward: async () => {
               this.tableRowEls[rowIdx].classList.remove('canon-row-active');
@@ -495,6 +526,7 @@ export class DepthLimitingDemo {
                 this.setPseudoHighlight(['clamp-set']);
               }
             },
+            viewDelay: BASE_PSEUDO_STEP_MS * 0.5,
           });
 
           actions.push({
@@ -535,12 +567,12 @@ export class DepthLimitingDemo {
             this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ?</span>`;
             await this.flyToKraft(`=${s.target}`, 'target-line', 'wt');
             this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ${s.target}</span>`;
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.kraftDisplayEl.style.opacity = '0';
             this.setPseudoHighlight(['clamp-set']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
         });
         // Action 2: W_C initialization
         actions.push({
@@ -548,12 +580,12 @@ export class DepthLimitingDemo {
             this.setPseudoHighlight(['kraft-init']);
             await this.flyToKraft(`=${s.kraftSum}`, 'kraft-init');
             this.updateKraftDisplay(s.kraftSum, s.target);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.kraftDisplayEl.innerHTML = `<span class="kraft-wc">W<sub>C</sub> = ?</span><br><span class="kraft-wt">W<sub>T</sub> = ?</span>`;
             this.setPseudoHighlight(['w-lambda', 'target-line']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
         });
 
       } else if (step.kind === 'sort-by-freq') {
@@ -591,7 +623,6 @@ export class DepthLimitingDemo {
             for (let i = 0; i < newOrder.length; i++) {
               this.tableRowEls[i] = newOrder[i];
             }
-            await this.scaledDelay(BASE_STEP_MS * 0.8);
           },
           backward: async () => {
             const tableBody = this.tableRowEls[0]?.parentElement as HTMLElement;
@@ -628,6 +659,7 @@ export class DepthLimitingDemo {
 
             this.setPseudoHighlight(['fn-def']);
           },
+          viewDelay: BASE_STEP_MS * 0.8,
         });
 
       } else if (step.kind === 'demote') {
@@ -877,7 +909,6 @@ export class DepthLimitingDemo {
             });
             this.svgEl.style.display = '';
             this.renderer.update(s.tree);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             // Hide tree
@@ -894,6 +925,7 @@ export class DepthLimitingDemo {
               this.setPseudoHighlight(['promote-for']);
             }
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
       }
     }
@@ -972,7 +1004,10 @@ export class DepthLimitingDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '\u2190 Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -982,7 +1017,13 @@ export class DepthLimitingDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next \u2192';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

@@ -29,6 +29,7 @@ const PSEUDO_LINES = [
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────────
@@ -42,6 +43,8 @@ export class DecodingTableDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -82,6 +85,32 @@ export class DecodingTableDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   setMaxDepth(n: number): void {
@@ -142,6 +171,8 @@ export class DecodingTableDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -166,6 +197,7 @@ export class DecodingTableDemo {
     if (this.actions.length > 0) {
       const gen = this.generation;
       const action = this.actions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
       await this.runPhase(action.forward);
       if (this.generation === gen) this.completedActions.push(action);
     }
@@ -474,12 +506,12 @@ export class DecodingTableDemo {
           forward: async () => {
             this.setPseudoHighlight(['fn-def']);
             this.showVarsBox();
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.6);
           },
           backward: async () => {
             this.clearPseudoHighlight();
             this.hideVarsBox();
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.6,
         });
         // Action 2: highlight depth-line, fly D value
         actions.push({
@@ -487,24 +519,24 @@ export class DecodingTableDemo {
             this.setPseudoHighlight(['depth-line']);
             await this.flyToDisplay(`= ${s.maxDepth}`, 'depth-line', 'D');
             this.setD(String(s.maxDepth));
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.setPseudoHighlight(['fn-def']);
             this.setD('');
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
         });
 
       } else if (step.kind === 'init-table') {
         actions.push({
           forward: async () => {
             this.setPseudoHighlight(['init-line']);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.6);
           },
           backward: async () => {
             this.setPseudoHighlight(['depth-line']);
             this.setStart('');
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.6,
         });
 
         // Separate action for start = 0 with fly-in
@@ -513,12 +545,12 @@ export class DecodingTableDemo {
             this.setPseudoHighlight(['start-init']);
             await this.flyToDisplay('= 0', 'start-init', 'start');
             this.setStart('0');
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.setStart('');
             this.setPseudoHighlight(['init-line']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
         });
 
       } else if (step.kind === 'symbol-start') {
@@ -529,7 +561,6 @@ export class DecodingTableDemo {
             this.sourceRowEls[s.rowIndex].classList.add('decode-src-active');
             this.setN('');
             this.setPseudoHighlight(['for-sym']);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.7);
           },
           backward: async () => {
             this.sourceRowEls[s.rowIndex].classList.remove('decode-src-active');
@@ -540,6 +571,7 @@ export class DecodingTableDemo {
               this.setPseudoHighlight(['start-advance']);
             }
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.7,
         });
 
       } else if (step.kind === 'compute-entries') {
@@ -549,12 +581,12 @@ export class DecodingTableDemo {
             this.setPseudoHighlight(['num-entries']);
             await this.flyToDisplay(`= ${s.numEntries}`, 'num-entries', 'n');
             this.setN(String(s.numEntries));
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
           },
           backward: async () => {
             this.setN('');
             this.setPseudoHighlight(['for-sym']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
         });
 
       } else if (step.kind === 'fill-entry') {
@@ -564,6 +596,8 @@ export class DecodingTableDemo {
 
         actions.push({
           forward: async () => {
+            // Clear previous row highlight
+            for (const el of this.decodeRowEls) el.classList.remove('decode-row-active');
             this.setPseudoHighlight(['for-i', 'fill-line']);
             const rowEl = this.decodeRowEls[s.tableIndex];
             this.scrollDecodeRowIntoView(s.tableIndex);
@@ -573,9 +607,8 @@ export class DecodingTableDemo {
             if (symCell) symCell.textContent = s.symbol;
             if (bitsCell) bitsCell.textContent = String(s.numBits);
             rowEl.classList.add('decode-row-filled');
-            await this.scaledDelay(BASE_STEP_MS * 0.6);
-            rowEl.classList.remove('decode-row-active');
           },
+          viewDelay: BASE_STEP_MS * 0.6,
           backward: async () => {
             const rowEl = this.decodeRowEls[s.tableIndex];
             rowEl.classList.remove('decode-row-active', 'decode-row-filled');
@@ -609,27 +642,28 @@ export class DecodingTableDemo {
 
           actions.push({
             forward: async () => {
+              for (const el of this.decodeRowEls) el.classList.remove('decode-row-active');
               this.setPseudoHighlight(['start-advance']);
               await this.flyToDisplay(`= ${newStart}`, 'start-advance', 'start');
               this.setStart(String(newStart));
               this.setN('');
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS * 0.4);
             },
             backward: async () => {
               this.setStart(String(oldStart));
               this.setN(String(numEntries));
               this.setPseudoHighlight(['for-i', 'fill-line']);
             },
+            viewDelay: BASE_PSEUDO_STEP_MS * 0.4,
           });
         }
 
       } else if (step.kind === 'done') {
         actions.push({
           forward: async () => {
+            for (const el of this.decodeRowEls) el.classList.remove('decode-row-active');
             for (const el of this.sourceRowEls) el.classList.remove('decode-src-active');
             this.setPseudoHighlight(['return-line']);
             this.hideVarsBox();
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             // Restore last source row highlight
@@ -647,6 +681,7 @@ export class DecodingTableDemo {
               this.setStart(String(lastCompute.startIndex + lastCompute.numEntries));
             }
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
       }
     }
@@ -694,7 +729,10 @@ export class DecodingTableDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '\u2190 Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -704,7 +742,13 @@ export class DecodingTableDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next \u2192';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

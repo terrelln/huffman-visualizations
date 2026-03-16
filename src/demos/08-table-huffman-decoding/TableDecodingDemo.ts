@@ -20,6 +20,7 @@ interface TableDecCharStep {
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────────
@@ -41,6 +42,8 @@ export class TableDecodingDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -83,6 +86,32 @@ export class TableDecodingDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   pause(): void {
@@ -140,6 +169,8 @@ export class TableDecodingDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -163,9 +194,10 @@ export class TableDecodingDemo {
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
-      const action = this.remainingActions.shift()!;
-      if (await this.runPhase(action.forward)) {
-        this.completedActions.push(action);
+      const phase = this.remainingActions.shift()!;
+      this.lastViewDelay = phase.viewDelay ?? BASE_STEP_MS;
+      if (await this.runPhase(phase.forward)) {
+        this.completedActions.push(phase);
       }
     } else {
       const nextIdx = this.currentStep + 1;
@@ -430,12 +462,12 @@ export class TableDecodingDemo {
         this.setLookupHighlight(step.globalBitOffset, step.availableBits, true);
         this.setTableRowHighlight(step.tableIndex, true);
         this.scrollRowIntoView(step.tableIndex);
-        await this.scaledDelay(BASE_STEP_MS);
       },
       backward: async () => {
         this.setLookupHighlight(step.globalBitOffset, step.availableBits, false);
         this.setTableRowHighlight(step.tableIndex, false);
       },
+      viewDelay: BASE_STEP_MS,
     });
 
     // Action 2: Fly bits + decode
@@ -457,7 +489,6 @@ export class TableDecodingDemo {
         }
         this.showBrace(i);
         this.showOutputChar(i);
-        await this.scaledDelay(BASE_STEP_MS * 0.2);
       },
       backward: async () => {
         // Restore consumed bits
@@ -474,6 +505,7 @@ export class TableDecodingDemo {
         this.hideBrace(i);
         this.hideOutputChar(i);
       },
+      viewDelay: BASE_STEP_MS * 0.2,
     });
 
     // Action 3: Cleanup
@@ -482,7 +514,6 @@ export class TableDecodingDemo {
         this.setTableRowHighlight(step.tableIndex, false);
         // Clear remaining lookup highlights (the consumed bits keep dec-bit-consumed)
         this.setLookupHighlight(step.globalBitOffset, step.availableBits, false);
-        await this.scaledDelay(BASE_STEP_MS * 0.3);
       },
       backward: async () => {
         this.setTableRowHighlight(step.tableIndex, true);
@@ -494,6 +525,7 @@ export class TableDecodingDemo {
           }
         }
       },
+      viewDelay: BASE_STEP_MS * 0.3,
     });
 
     return actions;
@@ -707,7 +739,10 @@ export class TableDecodingDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '\u2190 Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -717,7 +752,13 @@ export class TableDecodingDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next \u2192';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

@@ -34,6 +34,7 @@ const PSEUDO_LINES = [
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────
@@ -50,6 +51,8 @@ export class CanonicalizationDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -100,6 +103,32 @@ export class CanonicalizationDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   pause(): void {
@@ -156,6 +185,8 @@ export class CanonicalizationDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -180,6 +211,7 @@ export class CanonicalizationDemo {
     if (this.actions.length > 0) {
       const gen = this.generation;
       const action = this.actions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
       await this.runPhase(action.forward);
       if (this.generation === gen) this.completedActions.push(action);
     }
@@ -503,7 +535,6 @@ export class CanonicalizationDemo {
 
             this.renderer.clearEdgeHighlights();
             this.renderer.setHighlight([s.leafId], false);
-            await this.scaledDelay(BASE_STEP_MS * 0.5);
           },
           backward: async () => {
             const rowEl = this.tableRowEls[s.rowIndex];
@@ -514,6 +545,7 @@ export class CanonicalizationDemo {
             this.renderer.clearEdgeHighlights();
             this.renderer.setHighlight([s.leafId], false);
           },
+          viewDelay: BASE_STEP_MS * 0.5,
         });
 
       } else if (step.kind === 'sort') {
@@ -529,7 +561,6 @@ export class CanonicalizationDemo {
                 cwSpan.style.opacity = '0';
               }
             }
-            await this.scaledDelay(BASE_STEP_MS * 1.2);
           },
           backward: async () => {
             for (let i = 0; i < this.tableRowEls.length; i++) {
@@ -542,6 +573,7 @@ export class CanonicalizationDemo {
             }
             await this.scaledDelay(BASE_STEP_MS * 0.3);
           },
+          viewDelay: BASE_STEP_MS * 1.2,
         });
 
         // Fade out Huffman tree — done with it, canonical tree will be built from scratch
@@ -584,11 +616,11 @@ export class CanonicalizationDemo {
         actions.push({
           forward: async () => {
             this.setPseudoHighlight(['fn-canon']);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.clearPseudoHighlight();
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
         actions.push({
@@ -631,8 +663,6 @@ export class CanonicalizationDemo {
             for (let i = 0; i < newOrder.length; i++) {
               this.tableRowEls[i] = newOrder[i];
             }
-
-            await this.scaledDelay(BASE_STEP_MS * 0.8);
           },
           backward: async () => {
             const tableBody = this.tableRowEls[0]?.parentElement as HTMLElement;
@@ -675,6 +705,7 @@ export class CanonicalizationDemo {
 
             this.setPseudoHighlight(['fn-canon']);
           },
+          viewDelay: BASE_STEP_MS * 0.8,
         });
 
       } else if (step.kind === 'code-init') {
@@ -685,12 +716,12 @@ export class CanonicalizationDemo {
             this.codeDisplayEl.textContent = 'code = …';
             await this.flyToCodeDisplay('= 0', 'code-init');
             this.codeDisplayEl.textContent = 'code = 0b0';
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.codeDisplayEl.style.opacity = '0';
             this.setPseudoHighlight(['sort-line']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
 
@@ -704,7 +735,6 @@ export class CanonicalizationDemo {
         actions.push({
           forward: async () => {
             this.setPseudoHighlight(['for-loop']);
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             if (s.rowIndex === 0) {
@@ -714,6 +744,7 @@ export class CanonicalizationDemo {
               this.codeDisplayEl.textContent = codeDisplayBefore;
             }
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
         // Action A: highlight assign-cw, fill in codeword
@@ -728,7 +759,6 @@ export class CanonicalizationDemo {
               ).join('');
               cwSpan.style.opacity = '1';
             }
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
@@ -739,6 +769,7 @@ export class CanonicalizationDemo {
             }
             this.setPseudoHighlight(['for-loop']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
         // Build-tree action: interleaved right after assign-cw, before inc-code
@@ -794,7 +825,6 @@ export class CanonicalizationDemo {
                 await this.flyFromRow(rowEl, leafVp.x, leafVp.y, bt.symbol, 'canon-symbol-floater');
               }
 
-              await this.scaledDelay(BASE_STEP_MS * 0.5);
               this.renderer.clearEdgeHighlights();
               this.renderer.setHighlight([bt.codeword], false);
             },
@@ -806,6 +836,7 @@ export class CanonicalizationDemo {
               this.renderer.update(treeBefore);
               await this.scaledDelay(BASE_ANIM_MS);
             },
+            viewDelay: BASE_STEP_MS * 0.5,
           });
         }
 
@@ -819,13 +850,13 @@ export class CanonicalizationDemo {
             this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
             await this.flyToCodeDisplay('+ 1', 'inc-code');
             this.codeDisplayEl.textContent = codeAfterInc;
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.tableRowEls[s.rowIndex].classList.add('canon-row-active');
             this.codeDisplayEl.textContent = codeDisplayBefore;
             this.setPseudoHighlight(['assign-cw']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
         // Action C: highlight do-shift, apply shift
@@ -837,12 +868,12 @@ export class CanonicalizationDemo {
             this.setPseudoHighlight(['do-shift']);
             await this.flyToCodeDisplay(`<< ${s.shiftAmount}`, 'do-shift');
             this.codeDisplayEl.textContent = codeAfterShift;
-            await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
             this.codeDisplayEl.textContent = codeAfterInc;
             this.setPseudoHighlight(['inc-code']);
           },
+          viewDelay: BASE_PSEUDO_STEP_MS,
         });
 
         if (isLast) {
@@ -850,23 +881,23 @@ export class CanonicalizationDemo {
           actions.push({
             forward: async () => {
               this.setPseudoHighlight(['for-loop']);
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
             },
             backward: async () => {
               this.codeDisplayEl.textContent = codeAfterShift;
               this.setPseudoHighlight(['do-shift']);
             },
+            viewDelay: BASE_PSEUDO_STEP_MS,
           });
 
           // Action D: highlight return-line
           actions.push({
             forward: async () => {
               this.setPseudoHighlight(['return-line']);
-              await this.scaledDelay(BASE_PSEUDO_STEP_MS);
             },
             backward: async () => {
               this.setPseudoHighlight(['for-loop']);
             },
+            viewDelay: BASE_PSEUDO_STEP_MS,
           });
         }
 
@@ -963,7 +994,10 @@ export class CanonicalizationDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '← Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -973,7 +1007,13 @@ export class CanonicalizationDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next →';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

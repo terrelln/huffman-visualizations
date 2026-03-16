@@ -73,6 +73,7 @@ function getCompletedPseudoLines(snap: HuffmanSnapshot, stepIndex: number): stri
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ───────────────────────────────────────────────────────────────
@@ -92,6 +93,8 @@ export class HuffmanDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private scaledDelay(baseMs: number): Promise<void> {
     const gen = this.generation;
@@ -107,6 +110,32 @@ export class HuffmanDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   private prevBtn!: HTMLButtonElement;
@@ -248,6 +277,8 @@ export class HuffmanDemo {
         break;
       }
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
   }
 
@@ -255,6 +286,7 @@ export class HuffmanDemo {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const phase = this.remainingActions.shift()!;
+      this.lastViewDelay = phase.viewDelay ?? BASE_STEP_MS;
       if (await this.runPhase(phase.forward)) {
         this.completedActions.push(phase);
       }
@@ -287,6 +319,7 @@ export class HuffmanDemo {
       this.remainingActions = phases;
       this.completedActions = [];
       const first = this.remainingActions.shift()!;
+      this.lastViewDelay = first.viewDelay ?? BASE_STEP_MS;
       if (await this.runPhase(first.forward)) {
         this.completedActions.push(first);
       }
@@ -294,9 +327,9 @@ export class HuffmanDemo {
       this.updatePseudoHighlight(getCompletedPseudoLines(snap, this.currentStep));
       this.remainingActions = [];
       this.completedActions = [];
+      this.lastViewDelay = BASE_STEP_MS;
       await this.runPhase(async () => {
         this.renderer.update(snap.tree, snap.sections);
-        await this.scaledDelay(BASE_STEP_MS);
       });
     }
   }
@@ -326,8 +359,9 @@ export class HuffmanDemo {
 
     const p0Before = pseudoState;
     actions.push({
-      forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
+      forward: async () => { this.updatePseudoHighlight(['while']); },
       backward: async () => { this.updatePseudoHighlight(p0Before); },
+      viewDelay: BASE_STEP_MS,
     });
     pseudoState = ['while'];
 
@@ -367,12 +401,12 @@ export class HuffmanDemo {
         forward: async () => {
           this.updatePseudoHighlight(selLines);
           this.renderer.setHighlight([selectedId], true);
-          await this.scaledDelay(BASE_STEP_MS);
         },
         backward: async () => {
           this.renderer.setHighlight([selectedId], false);
           this.updatePseudoHighlight(selBefore);
         },
+        viewDelay: BASE_STEP_MS,
       });
       pseudoState = selLines;
     }
@@ -405,12 +439,14 @@ export class HuffmanDemo {
 
     if (snap.isComplete) {
       actions.push({
-        forward: async () => { this.updatePseudoHighlight(['while']); await this.scaledDelay(BASE_STEP_MS); },
+        forward: async () => { this.updatePseudoHighlight(['while']); },
         backward: async () => { this.updatePseudoHighlight(mergeLines); },
+        viewDelay: BASE_STEP_MS,
       });
       actions.push({
-        forward: async () => { this.updatePseudoHighlight(['return']); await this.scaledDelay(BASE_STEP_MS); },
+        forward: async () => { this.updatePseudoHighlight(['return']); },
         backward: async () => { this.updatePseudoHighlight(['while']); },
+        viewDelay: BASE_STEP_MS,
       });
     }
 
@@ -447,7 +483,10 @@ export class HuffmanDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '← Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -457,7 +496,13 @@ export class HuffmanDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next →';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);

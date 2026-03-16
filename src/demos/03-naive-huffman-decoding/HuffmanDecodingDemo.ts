@@ -90,6 +90,7 @@ interface CharStep {
 interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
+  viewDelay?: number;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────
@@ -109,6 +110,8 @@ export class HuffmanDecodingDemo {
   private isPlaying = false;
   private speedMultiplier = 1;
   private generation = 0;
+  private playDelayResolve: (() => void) | null = null;
+  private lastViewDelay = BASE_STEP_MS;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -153,6 +156,32 @@ export class HuffmanDecodingDemo {
       };
       requestAnimationFrame(tick);
     });
+  }
+
+  private playDelay(baseMs: number): Promise<void> {
+    return new Promise<void>(resolve => {
+      this.playDelayResolve = resolve;
+      const gen = this.generation;
+      const start = performance.now();
+      const tick = () => {
+        if (this.generation !== gen || this.playDelayResolve !== resolve) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
+          this.playDelayResolve = null;
+          resolve();
+        } else {
+          requestAnimationFrame(tick);
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cancelPlayDelay(): void {
+    if (this.playDelayResolve) {
+      const r = this.playDelayResolve;
+      this.playDelayResolve = null;
+      r();
+    }
   }
 
   pause(): void {
@@ -210,6 +239,8 @@ export class HuffmanDecodingDemo {
     const gen = this.generation;
     while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
+      if (!this.isPlaying || this.generation !== gen) break;
+      await this.playDelay(this.lastViewDelay);
     }
     if (this.generation !== gen) return;
     if (this.isAllDone()) {
@@ -234,6 +265,7 @@ export class HuffmanDecodingDemo {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const action = this.remainingActions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
       if (await this.runPhase(action.forward)) {
         this.completedActions.push(action);
       }
@@ -321,12 +353,12 @@ export class HuffmanDecodingDemo {
           await this.flyBit(charIdx, bitIdx, edge.parentId, edge.childId, edge.bit);
           if (this.generation !== gen) return;
           this.consumeBit(charIdx, bitIdx);
-          await this.scaledDelay(BASE_STEP_MS * 0.2);
         },
         backward: async () => {
           this.renderer.setEdgeHighlight(edge.parentId, edge.childId, false);
           this.restoreBit(charIdx, bitIdx);
         },
+        viewDelay: BASE_STEP_MS * 0.2,
       });
     }
 
@@ -337,13 +369,13 @@ export class HuffmanDecodingDemo {
         this.renderer.setHighlight([step.leafId], true);
         this.showBrace(i);
         this.showOutputChar(i);
-        await this.scaledDelay(BASE_STEP_MS);
       },
       backward: async () => {
         this.renderer.setHighlight([step.leafId], false);
         this.hideBrace(i);
         this.hideOutputChar(i);
       },
+      viewDelay: BASE_STEP_MS,
     });
 
     // Cleanup: clear all highlights (consumed bits, brace, and decoded char persist).
@@ -354,7 +386,6 @@ export class HuffmanDecodingDemo {
         for (const edge of step.edges) {
           this.renderer.setEdgeHighlight(edge.parentId, edge.childId, false);
         }
-        await this.scaledDelay(BASE_STEP_MS * 0.3);
       },
       backward: async () => {
         // Restore full highlighting state
@@ -363,6 +394,7 @@ export class HuffmanDecodingDemo {
           this.renderer.setEdgeHighlight(edge.parentId, edge.childId, true);
         }
       },
+      viewDelay: BASE_STEP_MS * 0.3,
     });
 
     return actions;
@@ -621,7 +653,10 @@ export class HuffmanDecodingDemo {
     this.prevBtn = document.createElement('button');
     this.prevBtn.className = 'btn-secondary';
     this.prevBtn.textContent = '← Prev';
-    this.prevBtn.addEventListener('click', () => { void this.handlePrev(); });
+    this.prevBtn.addEventListener('click', () => {
+      this.cancelPlayDelay();
+      void this.handlePrev();
+    });
 
     this.playBtn = document.createElement('button');
     this.playBtn.className = 'btn-secondary';
@@ -631,7 +666,13 @@ export class HuffmanDecodingDemo {
     this.nextBtn = document.createElement('button');
     this.nextBtn.className = 'btn-secondary';
     this.nextBtn.textContent = 'Next →';
-    this.nextBtn.addEventListener('click', () => { void this.handleNext(); });
+    this.nextBtn.addEventListener('click', () => {
+      if (this.isPlaying) {
+        this.cancelPlayDelay();
+      } else {
+        void this.handleNext();
+      }
+    });
 
     controls.appendChild(this.prevBtn);
     controls.appendChild(this.playBtn);
