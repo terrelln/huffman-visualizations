@@ -1,16 +1,11 @@
 # General
 
 * Don't gray out the "next" button while there is no active animation
-* All animations auto-play, not just the one currently on screen. Animations off screen should not auto play.
 * Update the default distribution to be more interesting
+* More consistent next & prev. IMO it should be an entire "action" always, for some definition of action.
 
 # Huffman Tree Construction
 
-* Code highlighting is a bit inconsistent
-    * The if in dequeue_min shouldn't be highlighted when the return is highlighted
-    * The "def dequeue_min" line doesn't need to be highlighted
-* There are still issues with prev highlighting the wrong sections of code
-    * Going back while the "while" line is highlighted highlights basically everything
 * The fly in/outs for the comparison should remain static while the "if" is highlighted, and fly when a branch is selected
 
 # Naive Huffman Encoding

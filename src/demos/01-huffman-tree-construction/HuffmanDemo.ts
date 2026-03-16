@@ -45,31 +45,27 @@ const PSEUDO_LINES: PseudoLine[] = [
 ];
 
 function deqCompareLines(step: SelectionStep): string[] {
-  if (!step.q1CandidateId) return ['fn-deq', 'deq-q1e'];
-  if (!step.q2CandidateId) return ['fn-deq', 'deq-q2e'];
-  return ['fn-deq', 'deq-cmp'];
+  if (!step.q1CandidateId) return ['deq-q1e'];
+  if (!step.q2CandidateId) return ['deq-q2e'];
+  return ['deq-cmp'];
 }
 
 function deqSelectedLines(step: SelectionStep): string[] {
-  if (!step.q1CandidateId) return ['fn-deq', 'deq-q1e'];
-  if (!step.q2CandidateId) return ['fn-deq', 'deq-q2e'];
-  if (step.selectedId === step.q1CandidateId) return ['fn-deq', 'deq-cmp', 'deq-r-q1'];
-  return ['fn-deq', 'deq-cmp', 'deq-else', 'deq-r-q2'];
+  if (!step.q1CandidateId) return ['deq-q1e'];
+  if (!step.q2CandidateId) return ['deq-q2e'];
+  if (step.selectedId === step.q1CandidateId) return ['deq-r-q1'];
+  return ['deq-r-q2'];
 }
 
-function getPseudoLines(snap: HuffmanSnapshot, stepIndex: number): string[] {
+// Returns the pseudocode lines that should be highlighted after a snapshot has fully completed.
+function getCompletedPseudoLines(snap: HuffmanSnapshot, stepIndex: number): string[] {
   if (!snap.selectionSteps) {
     if (stepIndex === 0) return ['fn-huf'];
     return ['q1-init', 'q2-init'];
   }
-  const main = ['while', 'deq-a', 'deq-b', 'node-new', 'node-freq', 'node-lr', 'q2-app'];
-  const deqSet = new Set<string>();
-  for (const step of snap.selectionSteps) {
-    for (const id of deqSelectedLines(step)) deqSet.add(id);
-  }
-  const result = [...main, ...deqSet];
-  if (snap.isComplete) result.push('return');
-  return result;
+  if (snap.isComplete) return ['return'];
+  // After a merge step completes, the merge lines are the last thing shown
+  return ['node-new', 'node-freq', 'node-lr', 'q2-app'];
 }
 
 // ── Action types ─────────────────────────────────────────────────────────────
@@ -295,7 +291,7 @@ export class HuffmanDemo {
         this.completedActions.push(first);
       }
     } else {
-      this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
+      this.updatePseudoHighlight(getCompletedPseudoLines(snap, this.currentStep));
       this.remainingActions = [];
       this.completedActions = [];
       await this.runPhase(async () => {
@@ -310,7 +306,7 @@ export class HuffmanDemo {
     this.currentStep = index;
     const snap = this.snapshots[this.currentStep];
 
-    this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
+    this.updatePseudoHighlight(getCompletedPseudoLines(snap, this.currentStep));
     this.completedActions = snap.selectionSteps ? this.buildActions(snap) : [];
     this.remainingActions = [];
 
@@ -323,7 +319,7 @@ export class HuffmanDemo {
   private buildActions(snap: HuffmanSnapshot): Action[] {
     const prevIndex = this.currentStep - 1;
     const prevSnap = this.snapshots[prevIndex];
-    const prevPseudoCompleted = prevSnap ? getPseudoLines(prevSnap, prevIndex) : [];
+    const prevPseudoCompleted = prevSnap ? getCompletedPseudoLines(prevSnap, prevIndex) : [];
 
     const actions: Action[] = [];
     let pseudoState = prevPseudoCompleted;
@@ -358,13 +354,6 @@ export class HuffmanDemo {
             this.renderer.setComparing(candidates, false);
           },
           backward: async () => {
-            this.renderer.setComparing(candidates, true);
-            await this.renderer.showComparisonAnimationReverse(
-              step.q1CandidateId!, step.q2CandidateId!,
-              step.q1CandidateFreq!, step.q2CandidateFreq!,
-              step.selectedId,
-            );
-            this.renderer.setComparing(candidates, false);
             this.updatePseudoHighlight(cmpBefore);
           },
         });
@@ -408,16 +397,8 @@ export class HuffmanDemo {
         }
       },
       backward: async () => {
-        if (snap.mergingFreqs && snap.mergedParentId) {
-          await this.renderer.showSumAnimationReverse(
-            mergingIds[0], mergingIds[1],
-            snap.mergingFreqs[0], snap.mergingFreqs[1],
-            snap.mergedParentId,
-          );
-        }
         this.renderer.setHighlight(mergingIds, true);
         this.renderer.update(prevSnap.tree, prevSnap.sections);
-        await this.scaledDelay(BASE_ANIM_MS);
         this.updatePseudoHighlight(mergeBefore);
       },
     });

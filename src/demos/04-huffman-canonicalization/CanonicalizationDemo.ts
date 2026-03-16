@@ -267,6 +267,28 @@ export class CanonicalizationDemo {
     await this.fly(fromX, fromY, toX, toY, text, cssClass, flyMs);
   }
 
+  private async flyToCodeDisplay(
+    text: string,
+    fromId: string,
+  ): Promise<void> {
+    const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
+      `.canon-pseudo-line[data-id="${fromId}"]`
+    );
+    if (!sourceLine || !this.codeDisplayEl) return;
+
+    const sourceRect = sourceLine.getBoundingClientRect();
+    const targetRect = this.codeDisplayEl.getBoundingClientRect();
+
+    await this.fly(
+      sourceRect.right + 4,
+      sourceRect.top + sourceRect.height / 2,
+      targetRect.left + targetRect.width / 2,
+      targetRect.top + targetRect.height / 2,
+      text,
+      'canon-row-floater',
+    );
+  }
+
   private async fly(
     fromX: number, fromY: number,
     toX: number, toY: number,
@@ -660,6 +682,8 @@ export class CanonicalizationDemo {
           forward: async () => {
             this.setPseudoHighlight(['code-init']);
             this.codeDisplayEl.style.opacity = '1';
+            this.codeDisplayEl.textContent = 'code = …';
+            await this.flyToCodeDisplay('= 0', 'code-init');
             this.codeDisplayEl.textContent = 'code = 0b0';
             await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
@@ -792,8 +816,9 @@ export class CanonicalizationDemo {
         actions.push({
           forward: async () => {
             this.setPseudoHighlight(['inc-code']);
-            this.codeDisplayEl.textContent = codeAfterInc;
             this.tableRowEls[s.rowIndex].classList.remove('canon-row-active');
+            await this.flyToCodeDisplay('+ 1', 'inc-code');
+            this.codeDisplayEl.textContent = codeAfterInc;
             await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
           backward: async () => {
@@ -810,6 +835,7 @@ export class CanonicalizationDemo {
         actions.push({
           forward: async () => {
             this.setPseudoHighlight(['do-shift']);
+            await this.flyToCodeDisplay(`<< ${s.shiftAmount}`, 'do-shift');
             this.codeDisplayEl.textContent = codeAfterShift;
             await this.scaledDelay(BASE_PSEUDO_STEP_MS);
           },
