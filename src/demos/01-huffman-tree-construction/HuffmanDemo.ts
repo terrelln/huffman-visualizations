@@ -287,15 +287,58 @@ export class HuffmanDemo {
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
-    if (this.remainingActions.length > 0) {
-      const phase = this.remainingActions.shift()!;
-      this.lastViewDelay = phase.viewDelay ?? BASE_STEP_MS;
-      if (await this.runPhase(phase.forward)) {
-        this.completedActions.push(phase);
+    const gen = this.generation;
+
+    // If no remaining actions, advance to next snapshot
+    if (this.remainingActions.length === 0) {
+      const nextIdx = this.currentStep + 1;
+      if (nextIdx >= this.snapshots.length) return;
+
+      this.currentStep = nextIdx;
+      const snap = this.snapshots[this.currentStep];
+
+      if (snap.selectionSteps) {
+        this.remainingActions = this.buildActions(snap);
+        this.completedActions = [];
+      } else {
+        // Non-selection snapshot (e.g., initial display)
+        this.updatePseudoHighlight(getCompletedPseudoLines(snap, this.currentStep));
+        this.remainingActions = [];
+        this.completedActions = [];
+        this.lastViewDelay = BASE_STEP_MS;
+        await this.runPhase(async () => {
+          this.renderer.update(snap.tree, snap.sections);
+        });
+        return;
       }
-    } else {
-      await this.goToStep(this.currentStep + 1, /*forward=*/true);
     }
+
+    // Play all remaining actions for this snapshot (one full merge cycle)
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.remainingActions.length > 0) {
+      const action = this.remainingActions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
+      await action.forward();
+      if (this.generation !== gen) return;
+      this.completedActions.push(action);
+
+      // Sub-action pacing
+      if (this.remainingActions.length > 0) {
+        if (this.isPlaying) {
+          await this.playDelay(this.lastViewDelay);
+          if (!this.isPlaying || this.generation !== gen) break;
+        } else {
+          await this.scaledDelay(this.lastViewDelay);
+          if (this.generation !== gen) return;
+        }
+      }
+    }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async handlePrev(): Promise<void> {
@@ -304,11 +347,32 @@ export class HuffmanDemo {
       this.isPlaying = false;
       this.updateNavButtons();
     }
+    const gen = this.generation;
+
     if (this.completedActions.length > 0) {
-      const phase = this.completedActions.pop()!;
-      this.remainingActions.unshift(phase);
-      await this.runPhase(phase.backward);
-    } else {
+      // Reverse all completed actions for current snapshot
+      this.isAnimating = true;
+      this.prevBtn.disabled = true;
+      this.nextBtn.disabled = true;
+
+      while (this.completedActions.length > 0) {
+        const action = this.completedActions.pop()!;
+        await action.backward();
+        if (this.generation !== gen) return;
+      }
+
+      // Visual state now matches the end of the previous snapshot.
+      // Step back currentStep to align.
+      if (this.currentStep > 0) {
+        this.currentStep--;
+        const snap = this.snapshots[this.currentStep];
+        this.completedActions = snap.selectionSteps ? this.buildActions(snap) : [];
+      }
+      this.remainingActions = [];
+
+      this.isAnimating = false;
+      this.updateNavButtons();
+    } else if (this.currentStep > 0) {
       await this.goToCompletedStep(this.currentStep - 1);
     }
   }

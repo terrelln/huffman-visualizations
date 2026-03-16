@@ -30,6 +30,7 @@ interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
   viewDelay?: number;
+  stepBoundary?: boolean;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────────
@@ -196,13 +197,36 @@ export class DecodingTableDemo {
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
-    if (this.actions.length > 0) {
-      const gen = this.generation;
+    if (this.actions.length === 0) return;
+    const gen = this.generation;
+
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.actions.length > 0) {
       const action = this.actions.shift()!;
       this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
-      await this.runPhase(action.forward);
-      if (this.generation === gen) this.completedActions.push(action);
+      await action.forward();
+      if (this.generation !== gen) return;
+      this.completedActions.push(action);
+
+      if (this.actions.length > 0 && this.actions[0].stepBoundary) break;
+
+      // Sub-action pacing
+      if (this.actions.length > 0) {
+        if (this.isPlaying) {
+          await this.playDelay(this.lastViewDelay);
+          if (!this.isPlaying || this.generation !== gen) break;
+        } else {
+          await this.scaledDelay(this.lastViewDelay);
+          if (this.generation !== gen) return;
+        }
+      }
     }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async handlePrev(): Promise<void> {
@@ -211,11 +235,24 @@ export class DecodingTableDemo {
       this.isPlaying = false;
       this.updateNavButtons();
     }
-    if (this.completedActions.length > 0) {
+    if (this.completedActions.length === 0) return;
+    const gen = this.generation;
+
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.completedActions.length > 0) {
       const action = this.completedActions.pop()!;
       this.actions.unshift(action);
-      await this.runPhase(action.backward);
+      await action.backward();
+      if (this.generation !== gen) return;
+
+      if (action.stepBoundary) break;
     }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async resetToInitial(): Promise<void> {
@@ -508,6 +545,7 @@ export class DecodingTableDemo {
         const s = step;
         // Action 1: highlight fn-def
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['fn-def']);
             this.showVarsBox();
@@ -534,6 +572,7 @@ export class DecodingTableDemo {
 
       } else if (step.kind === 'init-table') {
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['init-line']);
           },
@@ -561,6 +600,7 @@ export class DecodingTableDemo {
       } else if (step.kind === 'symbol-start') {
         const s = step;
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             for (const el of this.sourceRowEls) el.classList.remove('decode-src-active');
             this.sourceRowEls[s.rowIndex].classList.add('decode-src-active');
@@ -664,6 +704,7 @@ export class DecodingTableDemo {
 
       } else if (step.kind === 'done') {
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             for (const el of this.decodeRowEls) el.classList.remove('decode-row-active');
             for (const el of this.sourceRowEls) el.classList.remove('decode-src-active');

@@ -35,6 +35,7 @@ interface Action {
   forward: () => Promise<void>;
   backward: () => Promise<void>;
   viewDelay?: number;
+  stepBoundary?: boolean;
 }
 
 // ── Demo class ────────────────────────────────────────────────────────────
@@ -210,13 +211,37 @@ export class CanonicalizationDemo {
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
-    if (this.actions.length > 0) {
-      const gen = this.generation;
+    if (this.actions.length === 0) return;
+    const gen = this.generation;
+
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.actions.length > 0) {
       const action = this.actions.shift()!;
       this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
-      await this.runPhase(action.forward);
-      if (this.generation === gen) this.completedActions.push(action);
+      await action.forward();
+      if (this.generation !== gen) return;
+      this.completedActions.push(action);
+
+      // Stop at next step boundary
+      if (this.actions.length > 0 && this.actions[0].stepBoundary) break;
+
+      // Sub-action pacing
+      if (this.actions.length > 0) {
+        if (this.isPlaying) {
+          await this.playDelay(this.lastViewDelay);
+          if (!this.isPlaying || this.generation !== gen) break;
+        } else {
+          await this.scaledDelay(this.lastViewDelay);
+          if (this.generation !== gen) return;
+        }
+      }
     }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async handlePrev(): Promise<void> {
@@ -225,11 +250,25 @@ export class CanonicalizationDemo {
       this.isPlaying = false;
       this.updateNavButtons();
     }
-    if (this.completedActions.length > 0) {
+    if (this.completedActions.length === 0) return;
+    const gen = this.generation;
+
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.completedActions.length > 0) {
       const action = this.completedActions.pop()!;
       this.actions.unshift(action);
-      await this.runPhase(action.backward);
+      await action.backward();
+      if (this.generation !== gen) return;
+
+      // Stop when we've reached the start of this step group
+      if (action.stepBoundary) break;
     }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async resetToInitial(): Promise<void> {
@@ -506,6 +545,7 @@ export class CanonicalizationDemo {
       if (step.kind === 'extract') {
         const s = step;
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             const gen = this.generation;
             // Clear highlight from previous row
@@ -568,6 +608,7 @@ export class CanonicalizationDemo {
 
         // Erase naive codewords — only lengths matter for canonicalization
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             // Clear extraction row highlight
             for (const rowEl of this.tableRowEls) {
@@ -635,6 +676,7 @@ export class CanonicalizationDemo {
 
         // "Function call" action — highlight def canonicalize(table): before entering the body
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['fn-canon']);
           },
@@ -645,6 +687,7 @@ export class CanonicalizationDemo {
         });
 
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['sort-line']);
 
@@ -731,6 +774,7 @@ export class CanonicalizationDemo {
 
       } else if (step.kind === 'code-init') {
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['code-init']);
             this.codeDisplayEl.style.opacity = '1';
@@ -754,6 +798,7 @@ export class CanonicalizationDemo {
 
         // Action ForLoop: highlight for-loop as its own step
         actions.push({
+          stepBoundary: true,
           forward: async () => {
             this.setPseudoHighlight(['for-loop']);
           },
@@ -855,7 +900,6 @@ export class CanonicalizationDemo {
               // Remove this leaf (and any internal nodes it introduced) from the tree
               const treeBefore = buildCanonicalTree(rows, bt.sourceRowIndex - 1);
               this.renderer.update(treeBefore);
-              await this.scaledDelay(BASE_ANIM_MS);
             },
             viewDelay: BASE_STEP_MS * 0.5,
           });
@@ -900,6 +944,7 @@ export class CanonicalizationDemo {
         if (isLast) {
           // Final for-loop evaluation (loop exits after last row)
           actions.push({
+            stepBoundary: true,
             forward: async () => {
               this.setPseudoHighlight(['for-loop']);
             },

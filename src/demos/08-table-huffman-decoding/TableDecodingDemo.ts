@@ -193,18 +193,35 @@ export class TableDecodingDemo {
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
-    if (this.remainingActions.length > 0) {
-      const phase = this.remainingActions.shift()!;
-      this.lastViewDelay = phase.viewDelay ?? BASE_STEP_MS;
-      if (await this.runPhase(phase.forward)) {
-        this.completedActions.push(phase);
-      }
-    } else {
+    const gen = this.generation;
+
+    if (this.remainingActions.length === 0) {
       const nextIdx = this.currentStep + 1;
-      if (nextIdx < this.steps.length) {
-        await this.goToStep(nextIdx);
+      if (nextIdx >= this.steps.length) return;
+      this.currentStep = nextIdx;
+      this.remainingActions = this.buildCharActions(nextIdx);
+      this.completedActions = [];
+    }
+
+    this.isAnimating = true;
+    this.prevBtn.disabled = true;
+    this.nextBtn.disabled = true;
+
+    while (this.remainingActions.length > 0) {
+      const action = this.remainingActions.shift()!;
+      this.lastViewDelay = action.viewDelay ?? BASE_STEP_MS;
+      await action.forward();
+      if (this.generation !== gen) return;
+      this.completedActions.push(action);
+
+      if (this.remainingActions.length > 0 && this.isPlaying) {
+        await this.playDelay(this.lastViewDelay);
+        if (!this.isPlaying || this.generation !== gen) break;
       }
     }
+
+    this.isAnimating = false;
+    this.updateNavButtons();
   }
 
   private async handlePrev(): Promise<void> {
@@ -213,25 +230,36 @@ export class TableDecodingDemo {
       this.isPlaying = false;
       this.updateNavButtons();
     }
+    const gen = this.generation;
+
     if (this.completedActions.length > 0) {
-      const action = this.completedActions.pop()!;
-      this.remainingActions.unshift(action);
-      await this.runPhase(action.backward);
+      this.isAnimating = true;
+      this.prevBtn.disabled = true;
+      this.nextBtn.disabled = true;
+
+      while (this.completedActions.length > 0) {
+        const action = this.completedActions.pop()!;
+        await action.backward();
+        if (this.generation !== gen) return;
+      }
+
+      // Visual state now matches the end of the previous character.
+      // Step back currentStep to align.
+      if (this.currentStep > 0) {
+        this.currentStep--;
+        this.completedActions = this.buildCharActions(this.currentStep);
+      } else {
+        this.currentStep = -1;
+        this.completedActions = [];
+      }
+      this.remainingActions = [];
+
+      this.isAnimating = false;
+      this.updateNavButtons();
     } else if (this.currentStep > 0) {
       await this.goToCompletedStep(this.currentStep - 1);
     } else if (this.currentStep === 0) {
       await this.resetToInitial();
-    }
-  }
-
-  private async goToStep(i: number): Promise<void> {
-    this.currentStep = i;
-    const actions = this.buildCharActions(i);
-    this.remainingActions = actions;
-    this.completedActions = [];
-    const first = this.remainingActions.shift()!;
-    if (await this.runPhase(first.forward)) {
-      this.completedActions.push(first);
     }
   }
 
