@@ -95,10 +95,12 @@ export class CanonicalizationDemo {
   }
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -328,6 +330,7 @@ export class CanonicalizationDemo {
     cssClass: string,
     flyMs = BASE_FLY_MS,
   ): Promise<void> {
+    const gen = this.generation;
     const floater = document.createElement('div');
     floater.className = cssClass;
     floater.textContent = text;
@@ -335,9 +338,11 @@ export class CanonicalizationDemo {
     document.body.appendChild(floater);
 
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { floater.remove(); return; }
     floater.style.transition = 'opacity 0.15s';
     floater.style.opacity = '1';
     await this.scaledDelay(BASE_STEP_MS * 0.4);
+    if (this.generation !== gen) { floater.remove(); return; }
 
     const flyDur = Math.round(flyMs / this.speedMultiplier);
     floater.style.transition = `left ${flyDur}ms ease, top ${flyDur}ms ease, opacity ${flyDur}ms ease`;

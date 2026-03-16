@@ -99,10 +99,12 @@ export class DepthLimitingDemo {
   }
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -274,6 +276,7 @@ export class DepthLimitingDemo {
   // ── Flying label animation ────────────────────────────────────────────
 
   private async flyLabel(text: string, fromId: string, toRowIdx: number): Promise<void> {
+    const gen = this.generation;
     // Find source: the pseudocode line with the given id
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
       `.canon-pseudo-line[data-id="${fromId}"]`
@@ -293,6 +296,7 @@ export class DepthLimitingDemo {
 
     // Force layout
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { label.remove(); return; }
 
     const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
     label.style.transition = `left ${dur}ms ease, top ${dur}ms ease, opacity ${dur * 0.3}ms ease ${dur * 0.7}ms`;
@@ -300,12 +304,14 @@ export class DepthLimitingDemo {
     label.style.top = `${targetRect.top + targetRect.height / 2}px`;
 
     await this.scaledDelay(BASE_ANIM_MS);
+    if (this.generation !== gen) { label.remove(); return; }
     label.style.opacity = '0';
     await this.scaledDelay(BASE_ANIM_MS * 0.3);
     label.remove();
   }
 
   private async flyToKraft(text: string, fromId: string, targetVar: 'wc' | 'wt' = 'wc'): Promise<void> {
+    const gen = this.generation;
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
       `.canon-pseudo-line[data-id="${fromId}"]`
     );
@@ -325,6 +331,7 @@ export class DepthLimitingDemo {
     document.body.appendChild(label);
 
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { label.remove(); return; }
 
     const dur = Math.round(BASE_ANIM_MS / this.speedMultiplier);
     label.style.transition = `left ${dur}ms ease, top ${dur}ms ease, opacity ${dur * 0.3}ms ease ${dur * 0.7}ms`;
@@ -332,6 +339,7 @@ export class DepthLimitingDemo {
     label.style.top = `${targetRect.top + targetRect.height / 2}px`;
 
     await this.scaledDelay(BASE_ANIM_MS);
+    if (this.generation !== gen) { label.remove(); return; }
     label.style.opacity = '0';
     await this.scaledDelay(BASE_ANIM_MS * 0.3);
     label.remove();
