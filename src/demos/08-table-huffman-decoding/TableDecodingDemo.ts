@@ -40,6 +40,7 @@ export class TableDecodingDemo {
   private isAnimating = false;
   private isPlaying = false;
   private speedMultiplier = 1;
+  private generation = 0;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -72,10 +73,12 @@ export class TableDecodingDemo {
   }
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -86,6 +89,14 @@ export class TableDecodingDemo {
     if (this.isPlaying) {
       this.isPlaying = false;
       if (this.prevBtn) this.updateNavButtons();
+    }
+  }
+
+  play(): void {
+    if (!this.isPlaying && !this.isAllDone()) {
+      this.isPlaying = true;
+      if (this.prevBtn) this.updateNavButtons();
+      void this.playLoop();
     }
   }
 
@@ -126,30 +137,36 @@ export class TableDecodingDemo {
   }
 
   private async playLoop(): Promise<void> {
-    while (this.isPlaying && !this.isAllDone()) {
+    const gen = this.generation;
+    while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
     }
+    if (this.generation !== gen) return;
     if (this.isAllDone()) {
       this.isPlaying = false;
       this.updateNavButtons();
     }
   }
 
-  private async runPhase(fn: () => Promise<void>): Promise<void> {
+  private async runPhase(fn: () => Promise<void>): Promise<boolean> {
+    const gen = this.generation;
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
     await fn();
+    if (this.generation !== gen) return false;
     this.isAnimating = false;
     this.updateNavButtons();
+    return true;
   }
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const action = this.remainingActions.shift()!;
-      await this.runPhase(action.forward);
-      this.completedActions.push(action);
+      if (await this.runPhase(action.forward)) {
+        this.completedActions.push(action);
+      }
     } else {
       const nextIdx = this.currentStep + 1;
       if (nextIdx < this.steps.length) {
@@ -181,8 +198,9 @@ export class TableDecodingDemo {
     this.remainingActions = actions;
     this.completedActions = [];
     const first = this.remainingActions.shift()!;
-    await this.runPhase(first.forward);
-    this.completedActions.push(first);
+    if (await this.runPhase(first.forward)) {
+      this.completedActions.push(first);
+    }
   }
 
   private async goToCompletedStep(i: number): Promise<void> {
@@ -423,7 +441,9 @@ export class TableDecodingDemo {
     // Action 2: Fly bits + decode
     actions.push({
       forward: async () => {
+        const gen = this.generation;
         await this.flyBits(step.globalBitOffset, step.availableBits, step.lookupBits, step.tableIndex);
+        if (this.generation !== gen) return;
         // Consume the actual numBits
         for (let j = 0; j < step.numBits; j++) {
           this.consumeBit(step.globalBitOffset + j);
@@ -566,6 +586,7 @@ export class TableDecodingDemo {
   private async flyBits(
     globalStart: number, availableCount: number, lookupBits: string, tableIndex: number,
   ): Promise<void> {
+    const gen = this.generation;
     // Source: the available bits in the bitstream
     const firstBit = this.allBitEls[globalStart];
     const lastIdx = Math.min(globalStart + availableCount - 1, this.allBitEls.length - 1);
@@ -594,9 +615,11 @@ export class TableDecodingDemo {
 
     // Fade in at origin
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { floater.remove(); return; }
     floater.style.transition = 'opacity 0.15s';
     floater.style.opacity = '1';
     await this.scaledDelay(BASE_STEP_MS * 0.5);
+    if (this.generation !== gen) { floater.remove(); return; }
 
     // Fly to target and fade out
     const flyDur = Math.round(BASE_FLY_MS / this.speedMultiplier);
@@ -659,6 +682,7 @@ export class TableDecodingDemo {
       charIdx++;
     }
 
+    this.generation++;
     this.currentStep = -1;
     this.remainingActions = [];
     this.completedActions = [];

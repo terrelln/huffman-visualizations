@@ -95,12 +95,15 @@ export class HuffmanDemo {
   private isAnimating = false;
   private isPlaying = false;
   private speedMultiplier = 1;
+  private generation = 0;
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) {
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) {
           resolve();
         } else {
           requestAnimationFrame(tick);
@@ -181,13 +184,16 @@ export class HuffmanDemo {
 
   // ── Phase queue ─────────────────────────────────────────────────────────────
 
-  private async runPhase(fn: () => Promise<void>): Promise<void> {
+  private async runPhase(fn: () => Promise<void>): Promise<boolean> {
+    const gen = this.generation;
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
     await fn();
+    if (this.generation !== gen) return false;
     this.isAnimating = false;
     this.updateNavButtons();
+    return true;
   }
 
   private updateNavButtons(): void {
@@ -228,8 +234,17 @@ export class HuffmanDemo {
     }
   }
 
+  play(): void {
+    if (!this.isPlaying) {
+      this.isPlaying = true;
+      if (this.prevBtn) this.updateNavButtons();
+      void this.playLoop();
+    }
+  }
+
   private async playLoop(): Promise<void> {
-    while (this.isPlaying) {
+    const gen = this.generation;
+    while (this.isPlaying && this.generation === gen) {
       const snap = this.snapshots[this.currentStep];
       if (snap.isComplete && this.remainingActions.length === 0) {
         this.isPlaying = false;
@@ -244,8 +259,9 @@ export class HuffmanDemo {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const phase = this.remainingActions.shift()!;
-      await this.runPhase(phase.forward);
-      this.completedActions.push(phase);
+      if (await this.runPhase(phase.forward)) {
+        this.completedActions.push(phase);
+      }
     } else {
       await this.goToStep(this.currentStep + 1, /*forward=*/true);
     }
@@ -275,8 +291,9 @@ export class HuffmanDemo {
       this.remainingActions = phases;
       this.completedActions = [];
       const first = this.remainingActions.shift()!;
-      await this.runPhase(first.forward);
-      this.completedActions.push(first);
+      if (await this.runPhase(first.forward)) {
+        this.completedActions.push(first);
+      }
     } else {
       this.updatePseudoHighlight(getPseudoLines(snap, this.currentStep));
       this.remainingActions = [];
@@ -329,6 +346,7 @@ export class HuffmanDemo {
         const cmpLines = [deqLine, ...deqCompareLines(step)];
         actions.push({
           forward: async () => {
+            const gen = this.generation;
             this.updatePseudoHighlight(cmpLines);
             this.renderer.setComparing(candidates, true);
             await this.renderer.showComparisonAnimation(
@@ -336,6 +354,7 @@ export class HuffmanDemo {
               step.q1CandidateFreq!, step.q2CandidateFreq!,
               step.selectedId,
             );
+            if (this.generation !== gen) return;
             this.renderer.setComparing(candidates, false);
           },
           backward: async () => {
@@ -374,9 +393,11 @@ export class HuffmanDemo {
     const mergingIds = [...snap.mergingIds!] as [string, string];
     actions.push({
       forward: async () => {
+        const gen = this.generation;
         this.updatePseudoHighlight(mergeLines);
         this.renderer.update(snap.tree, snap.sections);
         await this.scaledDelay(BASE_ANIM_MS);
+        if (this.generation !== gen) return;
         this.renderer.setHighlight(mergingIds, false);
         if (snap.mergingFreqs && snap.mergedParentId) {
           await this.renderer.showSumAnimation(
@@ -418,6 +439,7 @@ export class HuffmanDemo {
   // ── Start ────────────────────────────────────────────────────────────────────
 
   start(inputs: SymbolInput[], _inputString: string): void {
+    this.generation++;
     this.snapshots = buildHuffmanSnapshots(inputs);
     this.currentStep = 0;
     this.remainingActions = [];

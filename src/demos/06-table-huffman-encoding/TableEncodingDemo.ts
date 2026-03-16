@@ -36,6 +36,7 @@ export class TableEncodingDemo {
   private isAnimating = false;
   private isPlaying = false;
   private speedMultiplier = 1;
+  private generation = 0;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -65,10 +66,12 @@ export class TableEncodingDemo {
   }
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -79,6 +82,14 @@ export class TableEncodingDemo {
     if (this.isPlaying) {
       this.isPlaying = false;
       if (this.prevBtn) this.updateNavButtons();
+    }
+  }
+
+  play(): void {
+    if (!this.isPlaying && !this.isAllDone()) {
+      this.isPlaying = true;
+      if (this.prevBtn) this.updateNavButtons();
+      void this.playLoop();
     }
   }
 
@@ -119,30 +130,36 @@ export class TableEncodingDemo {
   }
 
   private async playLoop(): Promise<void> {
-    while (this.isPlaying && !this.isAllDone()) {
+    const gen = this.generation;
+    while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
     }
+    if (this.generation !== gen) return;
     if (this.isAllDone()) {
       this.isPlaying = false;
       this.updateNavButtons();
     }
   }
 
-  private async runPhase(fn: () => Promise<void>): Promise<void> {
+  private async runPhase(fn: () => Promise<void>): Promise<boolean> {
+    const gen = this.generation;
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
     await fn();
+    if (this.generation !== gen) return false;
     this.isAnimating = false;
     this.updateNavButtons();
+    return true;
   }
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const action = this.remainingActions.shift()!;
-      await this.runPhase(action.forward);
-      this.completedActions.push(action);
+      if (await this.runPhase(action.forward)) {
+        this.completedActions.push(action);
+      }
     } else {
       const nextIdx = this.currentStep + 1;
       if (nextIdx < this.steps.length) {
@@ -174,8 +191,9 @@ export class TableEncodingDemo {
     this.remainingActions = actions;
     this.completedActions = [];
     const first = this.remainingActions.shift()!;
-    await this.runPhase(first.forward);
-    this.completedActions.push(first);
+    if (await this.runPhase(first.forward)) {
+      this.completedActions.push(first);
+    }
   }
 
   private async goToCompletedStep(i: number): Promise<void> {
@@ -307,10 +325,12 @@ export class TableEncodingDemo {
     // Single action: highlight all bits, fly the whole codeword as one pill, reveal all bits at once
     actions.push({
       forward: async () => {
+        const gen = this.generation;
         for (let j = 0; j < step.codeword.length; j++) {
           this.setBitHighlight(step.rowIndex, j, true);
         }
         await this.flyCodeword(step.rowIndex, step.codeword, i);
+        if (this.generation !== gen) return;
         for (let j = 0; j < step.codeword.length; j++) {
           this.showBit(i, j);
         }
@@ -476,6 +496,7 @@ export class TableEncodingDemo {
   private async flyCodeword(
     rowIndex: number, codeword: string, charIdx: number,
   ): Promise<void> {
+    const gen = this.generation;
     // Source: codeword cell in the symbol table
     const firstBit = this.tablePanelEl.querySelector<HTMLElement>(
       `.tbl-enc-cw-bit[data-row-idx="${rowIndex}"][data-bit-idx="0"]`
@@ -506,9 +527,11 @@ export class TableEncodingDemo {
 
     // Fade in at origin
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { floater.remove(); return; }
     floater.style.transition = 'opacity 0.15s';
     floater.style.opacity = '1';
     await this.scaledDelay(BASE_STEP_MS * 0.5);
+    if (this.generation !== gen) { floater.remove(); return; }
 
     // Fly to target and fade out
     const flyDur = Math.round(BASE_FLY_MS / this.speedMultiplier);
@@ -544,6 +567,7 @@ export class TableEncodingDemo {
       this.steps.push({ char, rowIndex: entry.rowIndex, codeword: entry.codeword });
     }
 
+    this.generation++;
     this.currentStep = -1;
     this.remainingActions = [];
     this.completedActions = [];

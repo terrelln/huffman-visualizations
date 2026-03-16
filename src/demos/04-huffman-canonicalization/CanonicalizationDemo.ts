@@ -109,6 +109,14 @@ export class CanonicalizationDemo {
     }
   }
 
+  play(): void {
+    if (!this.isPlaying && !this.isAllDone()) {
+      this.isPlaying = true;
+      if (this.prevBtn) this.updateNavButtons();
+      void this.playLoop();
+    }
+  }
+
   private isAllDone(): boolean {
     return this.actions.length === 0
       && this.steps.length > 0

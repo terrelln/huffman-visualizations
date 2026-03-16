@@ -31,6 +31,7 @@ const DEMO_TITLES = [
 interface IDemo {
   start(inputs: SymbolInput[], inputString: string): void;
   pause?(): void;
+  play?(): void;
 }
 
 export class DemoPlayer {
@@ -333,6 +334,12 @@ export class DemoPlayer {
       this.tableDecodingDemo.setMaxDepth(maxDepth);
       for (const demo of this.demos) {
         demo.start(inputs, inputString);
+      }
+      // Only auto-play the currently visible demo
+      for (let i = 0; i < this.demos.length; i++) {
+        if (i !== this.currentIndex) {
+          this.demos[i].pause?.();
+        }
       }
     });
 

@@ -108,6 +108,7 @@ export class HuffmanDecodingDemo {
   private isAnimating = false;
   private isPlaying = false;
   private speedMultiplier = 1;
+  private generation = 0;
 
   private prevBtn!: HTMLButtonElement;
   private playBtn!: HTMLButtonElement;
@@ -142,10 +143,12 @@ export class HuffmanDecodingDemo {
   }
 
   private scaledDelay(baseMs: number): Promise<void> {
+    const gen = this.generation;
     return new Promise<void>(resolve => {
       const start = performance.now();
       const tick = () => {
-        if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
+        if (this.generation !== gen) resolve();
+        else if (performance.now() - start >= baseMs / this.speedMultiplier) resolve();
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
@@ -156,6 +159,14 @@ export class HuffmanDecodingDemo {
     if (this.isPlaying) {
       this.isPlaying = false;
       if (this.prevBtn) this.updateNavButtons();
+    }
+  }
+
+  play(): void {
+    if (!this.isPlaying && !this.isAllDone()) {
+      this.isPlaying = true;
+      if (this.prevBtn) this.updateNavButtons();
+      void this.playLoop();
     }
   }
 
@@ -196,30 +207,36 @@ export class HuffmanDecodingDemo {
   }
 
   private async playLoop(): Promise<void> {
-    while (this.isPlaying && !this.isAllDone()) {
+    const gen = this.generation;
+    while (this.isPlaying && !this.isAllDone() && this.generation === gen) {
       await this.handleNext();
     }
+    if (this.generation !== gen) return;
     if (this.isAllDone()) {
       this.isPlaying = false;
       this.updateNavButtons();
     }
   }
 
-  private async runPhase(fn: () => Promise<void>): Promise<void> {
+  private async runPhase(fn: () => Promise<void>): Promise<boolean> {
+    const gen = this.generation;
     this.isAnimating = true;
     this.prevBtn.disabled = true;
     this.nextBtn.disabled = true;
     await fn();
+    if (this.generation !== gen) return false;
     this.isAnimating = false;
     this.updateNavButtons();
+    return true;
   }
 
   private async handleNext(): Promise<void> {
     if (this.isAnimating) return;
     if (this.remainingActions.length > 0) {
       const action = this.remainingActions.shift()!;
-      await this.runPhase(action.forward);
-      this.completedActions.push(action);
+      if (await this.runPhase(action.forward)) {
+        this.completedActions.push(action);
+      }
     } else {
       const nextIdx = this.currentStep + 1;
       if (nextIdx < this.steps.length) {
@@ -251,8 +268,9 @@ export class HuffmanDecodingDemo {
     this.remainingActions = actions;
     this.completedActions = [];
     const first = this.remainingActions.shift()!;
-    await this.runPhase(first.forward);
-    this.completedActions.push(first);
+    if (await this.runPhase(first.forward)) {
+      this.completedActions.push(first);
+    }
   }
 
   private async goToCompletedStep(i: number): Promise<void> {
@@ -298,8 +316,10 @@ export class HuffmanDecodingDemo {
       const charIdx = i;
       actions.push({
         forward: async () => {
+          const gen = this.generation;
           this.renderer.setEdgeHighlight(edge.parentId, edge.childId, true);
           await this.flyBit(charIdx, bitIdx, edge.parentId, edge.childId, edge.bit);
+          if (this.generation !== gen) return;
           this.consumeBit(charIdx, bitIdx);
           await this.scaledDelay(BASE_STEP_MS * 0.2);
         },
@@ -509,6 +529,7 @@ export class HuffmanDecodingDemo {
     charIdx: number, bitIdx: number,
     parentId: string, childId: string, bit: string,
   ): Promise<void> {
+    const gen = this.generation;
     // Source: the panel bit element (sample its position before consuming it)
     const bitEl = this.decPanelEl.querySelector<HTMLElement>(
       `.dec-bit[data-char-idx="${charIdx}"][data-bit-idx="${bitIdx}"]`
@@ -537,9 +558,11 @@ export class HuffmanDecodingDemo {
 
     // Fade in at origin
     await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    if (this.generation !== gen) { floater.remove(); return; }
     floater.style.transition = 'opacity 0.15s';
     floater.style.opacity = '1';
     await this.scaledDelay(BASE_STEP_MS * 0.5);
+    if (this.generation !== gen) { floater.remove(); return; }
 
     // Fly to tree edge label and fade out
     const flyDur = Math.round(BASE_FLY_MS / this.speedMultiplier);
@@ -567,6 +590,7 @@ export class HuffmanDecodingDemo {
       this.steps.push({ char, leafId, edges });
     }
 
+    this.generation++;
     this.currentStep = -1;
     this.remainingActions = [];
     this.completedActions = [];
