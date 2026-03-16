@@ -10,11 +10,12 @@ import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAl
 import { buildCanonSteps } from './demos/04-huffman-canonicalization/CanonicalizationAlgorithm';
 
 const DEFAULT_SYMBOLS: SymbolInput[] = [
-  { symbol: 'A', freq: 5 },
-  { symbol: 'B', freq: 3 },
-  { symbol: 'C', freq: 2 },
-  { symbol: 'D', freq: 1 },
-  { symbol: 'E', freq: 1 },
+  { symbol: 'A', freq: 10 },
+  { symbol: 'E', freq: 25 },
+  { symbol: 'G', freq: 5 },
+  { symbol: 'M', freq: 1 },
+  { symbol: 'N', freq: 1 },
+  { symbol: 'O', freq: 5 },
 ];
 
 const DEMO_TITLES = [
@@ -163,7 +164,7 @@ export class DemoPlayer {
 
   private async loadWordList(): Promise<void> {
     try {
-      const res = await fetch('/wordle-answers-alphabetical.txt');
+      const res = await fetch(`${import.meta.env.BASE_URL}wordle-answers-alphabetical.txt`);
       const text = await res.text();
       this.wordList = text.split('\n').map(w => w.trim().toUpperCase()).filter(w => w.length > 0);
       this.updateInputString();
@@ -394,7 +395,10 @@ export class DemoPlayer {
     symInput.placeholder = 'A';
     symInput.value = symbol;
     symInput.maxLength = 1;
-    symInput.addEventListener('input', () => this.updateInputString());
+    symInput.addEventListener('input', () => {
+      symInput.value = symInput.value.toUpperCase().replace(/[^A-Z]/g, '');
+      this.updateInputString();
+    });
 
     const sep = document.createElement('span');
     sep.className = 'chip-sep';
@@ -451,6 +455,7 @@ export class DemoPlayer {
     const seen = new Set<string>();
     for (const { symbol, freq } of inputs) {
       if (!symbol) return 'Symbol names cannot be empty.';
+      if (!/^[A-Z]$/.test(symbol)) return `Symbol "${symbol}" must be a single uppercase letter (A–Z).`;
       if (seen.has(symbol)) return `Duplicate symbol: "${symbol}"`;
       seen.add(symbol);
       if (!Number.isInteger(freq) || freq < 1) return `Count for "${symbol}" must be a positive integer.`;

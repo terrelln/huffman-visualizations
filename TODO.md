@@ -1,7 +1,6 @@
 # General
 
-* Update the default distribution to be more interesting
-* More consistent next & prev. IMO it should be an entire "action" always, for some definition of action.
+* Consistent sorting of tables
 
 # Huffman Tree Construction
 
