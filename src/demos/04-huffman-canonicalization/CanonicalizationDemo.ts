@@ -306,7 +306,7 @@ export class CanonicalizationDemo {
     fromId: string,
   ): Promise<void> {
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
-      `.canon-pseudo-line[data-id="${fromId}"]`
+      `.pseudo-line[data-id="${fromId}"]`
     );
     if (!sourceLine || !this.codeDisplayEl) return;
 
@@ -358,7 +358,7 @@ export class CanonicalizationDemo {
   private setPseudoHighlight(ids: string[]): void {
     const active = new Set(ids);
     const lines = Array.from(
-      this.pseudoEl.querySelectorAll<HTMLElement>('.canon-pseudo-line')
+      this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line')
     );
     lines.forEach((el, i) => {
       const isActive = active.has(el.dataset.id ?? '');
@@ -391,12 +391,12 @@ export class CanonicalizationDemo {
 
     // Pseudocode block
     this.pseudoEl = document.createElement('div');
-    this.pseudoEl.className = 'canon-pseudo';
+    this.pseudoEl.className = 'pseudo-panel';
     const pseudoBody = document.createElement('div');
-    pseudoBody.className = 'canon-pseudo-body';
+    pseudoBody.className = 'pseudo-body';
     for (const line of PSEUDO_LINES) {
       const div = document.createElement('div');
-      div.className = 'canon-pseudo-line';
+      div.className = 'pseudo-line';
       div.dataset.id = line.id;
       div.dataset.indent = String(line.indent);
       div.innerHTML = line.html;
@@ -508,8 +508,13 @@ export class CanonicalizationDemo {
         actions.push({
           forward: async () => {
             const gen = this.generation;
+            // Clear highlight from previous row
+            if (s.rowIndex > 0) {
+              this.tableRowEls[s.rowIndex - 1].classList.remove('canon-row-active');
+            }
             this.renderer.setHighlight([s.leafId], true);
             const rowEl = this.tableRowEls[s.rowIndex];
+            rowEl.classList.add('canon-row-active');
             const cwCell = rowEl.querySelector<HTMLElement>('.canon-cell-cw') ?? rowEl;
             const cwSpan = cwCell.querySelector<HTMLElement>('.canon-cw-text') ?? cwCell;
 
@@ -543,10 +548,15 @@ export class CanonicalizationDemo {
           },
           backward: async () => {
             const rowEl = this.tableRowEls[s.rowIndex];
+            rowEl.classList.remove('canon-row-active');
             const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
             if (cwSpan) cwSpan.textContent = '';
             rowEl.style.transition = '';
             rowEl.style.opacity = '0';
+            // Restore highlight on previous row
+            if (s.rowIndex > 0) {
+              this.tableRowEls[s.rowIndex - 1].classList.add('canon-row-active');
+            }
             this.renderer.clearEdgeHighlights();
             this.renderer.setHighlight([s.leafId], false);
           },
@@ -559,7 +569,9 @@ export class CanonicalizationDemo {
         // Erase naive codewords — only lengths matter for canonicalization
         actions.push({
           forward: async () => {
+            // Clear extraction row highlight
             for (const rowEl of this.tableRowEls) {
+              rowEl.classList.remove('canon-row-active');
               const cwSpan = rowEl.querySelector<HTMLElement>('.canon-cw-text');
               if (cwSpan) {
                 cwSpan.style.transition = 'opacity 0.3s';
@@ -575,6 +587,10 @@ export class CanonicalizationDemo {
                 cwSpan.style.transition = 'opacity 0.3s';
                 cwSpan.style.opacity = '1';
               }
+            }
+            // Restore last extraction row highlight
+            if (this.tableRowEls.length > 0) {
+              this.tableRowEls[this.tableRowEls.length - 1].classList.add('canon-row-active');
             }
             await this.scaledDelay(BASE_STEP_MS * 0.3);
           },

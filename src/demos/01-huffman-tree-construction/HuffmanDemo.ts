@@ -195,16 +195,19 @@ export class HuffmanDemo {
   private updatePseudoHighlight(ids: string[]): void {
     const active = new Set(ids);
     const lines = Array.from(this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line'));
-    for (const div of lines) {
-      const id = div.dataset.id ?? '';
-      div.classList.toggle('active', id !== '' && active.has(id));
-      div.classList.remove('active-first', 'active-last');
-    }
-    for (let i = 0; i < lines.length; i++) {
-      if (!lines[i].classList.contains('active')) continue;
-      if (!lines[i - 1]?.classList.contains('active')) lines[i].classList.add('active-first');
-      if (!lines[i + 1]?.classList.contains('active')) lines[i].classList.add('active-last');
-    }
+    lines.forEach((el, i) => {
+      const id = el.dataset.id ?? '';
+      const isActive = id !== '' && active.has(id);
+      el.classList.toggle('active', isActive);
+      if (isActive) {
+        const prevId = lines[i - 1]?.dataset.id ?? '';
+        const nextId = lines[i + 1]?.dataset.id ?? '';
+        el.classList.toggle('active-first', !active.has(prevId));
+        el.classList.toggle('active-last',  !active.has(nextId));
+      } else {
+        el.classList.remove('active-first', 'active-last');
+      }
+    });
   }
 
   // ── Phase queue ─────────────────────────────────────────────────────────────

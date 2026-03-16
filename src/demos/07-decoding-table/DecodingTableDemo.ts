@@ -3,9 +3,9 @@ import type { DecodingTableStep, DecodeTableEntry } from './DecodingTableAlgorit
 import type { DepthRow } from '../05-huffman-depth-limiting/DepthLimitingAlgorithm';
 import type { SymbolInput } from '../01-huffman-tree-construction/HuffmanAlgorithm';
 
-const BASE_STEP_MS = 1400;
-const BASE_PSEUDO_STEP_MS = 2400;
-const BASE_ANIM_MS = 1000;
+const BASE_STEP_MS = 700;
+const BASE_PSEUDO_STEP_MS = 1200;
+const BASE_ANIM_MS = 500;
 
 // ── Syntax coloring helpers ───────────────────────────────────────────────────
 const K = (s: string) => `<span class="pk">${s}</span>`;
@@ -231,7 +231,7 @@ export class DecodingTableDemo {
   private setPseudoHighlight(ids: string[]): void {
     const active = new Set(ids);
     const lines = Array.from(
-      this.pseudoEl.querySelectorAll<HTMLElement>('.canon-pseudo-line')
+      this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line')
     );
     lines.forEach((el, i) => {
       const isActive = active.has(el.dataset.id ?? '');
@@ -260,7 +260,7 @@ export class DecodingTableDemo {
   ): Promise<void> {
     const gen = this.generation;
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
-      `.canon-pseudo-line[data-id="${fromId}"]`
+      `.pseudo-line[data-id="${fromId}"]`
     );
     const targetSpan = target === 'D' ? this.dValEl
       : target === 'start' ? this.startValEl : this.nValEl;
@@ -355,12 +355,12 @@ export class DecodingTableDemo {
 
     // Pseudocode
     this.pseudoEl = document.createElement('div');
-    this.pseudoEl.className = 'canon-pseudo';
+    this.pseudoEl.className = 'pseudo-panel';
     const pseudoBody = document.createElement('div');
-    pseudoBody.className = 'canon-pseudo-body';
+    pseudoBody.className = 'pseudo-body';
     for (const line of PSEUDO_LINES) {
       const div = document.createElement('div');
-      div.className = 'canon-pseudo-line';
+      div.className = 'pseudo-line';
       div.dataset.id = line.id;
       div.dataset.indent = String(line.indent);
       div.innerHTML = line.html;

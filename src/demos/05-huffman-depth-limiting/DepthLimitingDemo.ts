@@ -253,7 +253,7 @@ export class DepthLimitingDemo {
   private setPseudoHighlight(ids: string[]): void {
     const active = new Set(ids);
     const lines = Array.from(
-      this.pseudoEl.querySelectorAll<HTMLElement>('.canon-pseudo-line')
+      this.pseudoEl.querySelectorAll<HTMLElement>('.pseudo-line')
     );
     lines.forEach((el, i) => {
       const isActive = active.has(el.dataset.id ?? '');
@@ -279,7 +279,7 @@ export class DepthLimitingDemo {
     const gen = this.generation;
     // Find source: the pseudocode line with the given id
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
-      `.canon-pseudo-line[data-id="${fromId}"]`
+      `.pseudo-line[data-id="${fromId}"]`
     );
     const targetCell = this.tableRowEls[toRowIdx]?.querySelector<HTMLElement>('.canon-cell-bits');
     if (!sourceLine || !targetCell) return;
@@ -313,7 +313,7 @@ export class DepthLimitingDemo {
   private async flyToKraft(text: string, fromId: string, targetVar: 'wc' | 'wt' = 'wc'): Promise<void> {
     const gen = this.generation;
     const sourceLine = this.pseudoEl.querySelector<HTMLElement>(
-      `.canon-pseudo-line[data-id="${fromId}"]`
+      `.pseudo-line[data-id="${fromId}"]`
     );
     if (!sourceLine || !this.kraftDisplayEl) return;
 
@@ -366,12 +366,12 @@ export class DepthLimitingDemo {
 
     // Pseudocode block
     this.pseudoEl = document.createElement('div');
-    this.pseudoEl.className = 'canon-pseudo';
+    this.pseudoEl.className = 'pseudo-panel';
     const pseudoBody = document.createElement('div');
-    pseudoBody.className = 'canon-pseudo-body';
+    pseudoBody.className = 'pseudo-body';
     for (const line of PSEUDO_LINES) {
       const div = document.createElement('div');
-      div.className = 'canon-pseudo-line';
+      div.className = 'pseudo-line';
       div.dataset.id = line.id;
       div.dataset.indent = String(line.indent);
       div.innerHTML = line.html;

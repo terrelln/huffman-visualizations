@@ -370,10 +370,13 @@ button:disabled {
 /* ── Pseudocode panel ───────────────────────────────────────────────────── */
 
 .pseudo-panel {
-  flex-shrink: 0;
-  width: 320px;
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 11px;
+}
+
+.viz-area > .pseudo-panel {
+  flex-shrink: 0;
+  width: 320px;
 }
 
 .pseudo-header {
@@ -411,6 +414,10 @@ button:disabled {
 
 .pseudo-line[data-indent="3"] {
   padding-left: 4.5em;
+}
+
+.pseudo-line[data-indent="4"] {
+  padding-left: 6em;
 }
 
 .pseudo-line.active {
@@ -821,57 +828,6 @@ button:disabled {
   color: #6c757d;
 }
 
-.canon-pseudo {
-  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
-  font-size: 11px;
-}
-
-.canon-pseudo-body {
-  background: #fff;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  padding: 10px 12px;
-  line-height: 1.75;
-}
-
-.canon-pseudo-line {
-  border-left: 3px solid transparent;
-  padding: 0 4px;
-  transition: background 0.15s, border-color 0.15s;
-  white-space: nowrap;
-}
-
-.canon-pseudo-line[data-indent="1"] {
-  padding-left: 1.5em;
-}
-
-.canon-pseudo-line[data-indent="2"] {
-  padding-left: 3em;
-}
-
-.canon-pseudo-line[data-indent="3"] {
-  padding-left: 4.5em;
-}
-
-.canon-pseudo-line[data-indent="4"] {
-  padding-left: 6em;
-}
-
-.canon-pseudo-line.active {
-  background: #fff3cd;
-  border-left-color: #f59f00;
-  border-radius: 0;
-}
-
-.canon-pseudo-line.active-first {
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
-}
-
-.canon-pseudo-line.active-last {
-  border-bottom-left-radius: 4px;
-  border-bottom-right-radius: 4px;
-}
 
 .canon-code-display {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
@@ -994,12 +950,12 @@ button:disabled {
   align-items: flex-start;
 }
 
-.depth-body-row>.canon-pseudo {
+.depth-body-row>.pseudo-panel {
   flex: 1;
   min-width: 0;
 }
 
-.depth-panel .canon-pseudo-line {
+.depth-panel .pseudo-line {
   white-space: normal;
 }
 
@@ -1088,8 +1044,8 @@ button:disabled {
   font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
   font-size: 0.85rem;
   font-weight: 700;
-  color: #0d6efd;
-  background: #e7f1ff;
+  color: #052c65;
+  background: #cfe2ff;
   border: 1px solid #0d6efd;
   border-radius: 4px;
   padding: 1px 6px;
@@ -1124,7 +1080,7 @@ button:disabled {
 
 .tbl-enc-table-panel {
   flex-shrink: 0;
-  width: 260px;
+  width: 300px;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -1312,7 +1268,7 @@ button:disabled {
 
 .tbl-dec-table-panel {
   flex-shrink: 0;
-  width: 450px;
+  width: 380px;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
