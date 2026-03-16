@@ -1,6 +1,8 @@
 # General
 
 * Don't gray out the "next" button while there is no active animation
+* All animations auto-play, not just the one currently on screen. Animations off screen should not auto play.
+* Update the default distribution to be more interesting
 
 # Huffman Tree Construction
 
@@ -14,7 +16,6 @@
 # Naive Huffman Encoding
 
 * There is a dead state when pressing prev, when going back from the beginning of a symbol to the end of the previous.
-* All animations auto-play, not just the one currently on screen. Animations off screen should not auto play.
 
 # Huffman Canonicalization
 
@@ -23,3 +24,4 @@
 
 # Huffman Depth Limiting
 
+# Table-based Huffman Encoding
