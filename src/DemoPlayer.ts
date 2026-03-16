@@ -4,6 +4,7 @@ import { HuffmanDecodingDemo } from './demos/03-naive-huffman-decoding/HuffmanDe
 import { CanonicalizationDemo } from './demos/04-huffman-canonicalization/CanonicalizationDemo';
 import { DepthLimitingDemo } from './demos/05-huffman-depth-limiting/DepthLimitingDemo';
 import { TableEncodingDemo } from './demos/06-table-huffman-encoding/TableEncodingDemo';
+import { DecodingTableDemo } from './demos/07-decoding-table/DecodingTableDemo';
 import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAlgorithm';
 import { buildCanonSteps } from './demos/04-huffman-canonicalization/CanonicalizationAlgorithm';
 
@@ -22,6 +23,7 @@ const DEMO_TITLES = [
   'Huffman Canonicalization',
   'Huffman Depth Limiting',
   'Table-based Encoding',
+  'Decoding Table Construction',
 ];
 
 interface IDemo {
@@ -40,6 +42,7 @@ export class DemoPlayer {
   private depthSliderUserModified = false;
   private depthLimitingDemo!: DepthLimitingDemo;
   private tableEncodingDemo!: TableEncodingDemo;
+  private decodingTableDemo!: DecodingTableDemo;
 
   // ── Demo navigation state ──────────────────────────────────────────────────
   private demos: IDemo[] = [];
@@ -109,6 +112,10 @@ export class DemoPlayer {
     const slide6 = this.addSlide();
     this.tableEncodingDemo = new TableEncodingDemo(slide6);
     this.demos.push(this.tableEncodingDemo);
+
+    const slide7 = this.addSlide();
+    this.decodingTableDemo = new DecodingTableDemo(slide7);
+    this.demos.push(this.decodingTableDemo);
 
     this.updateNavUI();
     void this.loadWordList();
@@ -315,6 +322,7 @@ export class DemoPlayer {
       const maxDepth = parseInt(this.depthSliderEl.value, 10);
       this.depthLimitingDemo.setMaxDepth(maxDepth);
       this.tableEncodingDemo.setMaxDepth(maxDepth);
+      this.decodingTableDemo.setMaxDepth(maxDepth);
       for (const demo of this.demos) {
         demo.start(inputs, inputString);
       }
