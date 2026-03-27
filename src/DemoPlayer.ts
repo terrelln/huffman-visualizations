@@ -9,6 +9,8 @@ import { TableDecodingDemo } from './demos/08-table-huffman-decoding/TableDecodi
 import type { SymbolInput } from './demos/01-huffman-tree-construction/HuffmanAlgorithm';
 import { buildCanonSteps } from './demos/04-huffman-canonicalization/CanonicalizationAlgorithm';
 
+declare function gtag(...args: unknown[]): void;
+
 const DEFAULT_SYMBOLS: SymbolInput[] = [
   { symbol: 'A', freq: 10 },
   { symbol: 'E', freq: 25 },
@@ -178,6 +180,10 @@ export class DemoPlayer {
     this.currentIndex = index;
     this.slidesEl.style.transform = `translateX(-${index * 100}%)`;
     this.updateNavUI();
+    gtag('event', 'view_demo', {
+      demo_index: index,
+      demo_title: DEMO_TITLES[index],
+    });
   }
 
   private updateNavUI(): void {
