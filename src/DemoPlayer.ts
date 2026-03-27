@@ -74,6 +74,11 @@ export class DemoPlayer {
     h1.textContent = 'Huffman Visualizations';
     appEl.appendChild(h1);
 
+    const intro = document.createElement('p');
+    intro.className = 'demo-description';
+    intro.innerHTML = '<a href="https://en.wikipedia.org/wiki/Huffman_coding">Huffman coding</a> is a lossless compression algorithm that assigns shorter bit patterns to more frequent symbols and longer patterns to rarer ones. It is widely used in data compression formats like Zstd, Zlib, JPEG, and MP3. These demos walk through each stage of building and using a Huffman code, from tree construction to naive encoding and decoding, and finally to table-based encoding and decoding that is used in practice.';
+    appEl.appendChild(intro);
+
     // Shared input panel
     const inputPanel = document.createElement('div');
     appEl.appendChild(inputPanel);
