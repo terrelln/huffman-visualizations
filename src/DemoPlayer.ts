@@ -29,6 +29,18 @@ const DEMO_TITLES = [
   'Table-based Decoding',
 ];
 
+const DEMO_DESCRIPTIONS = [
+  'Builds a Huffman tree from symbol frequencies using the <a href="https://en.wikipedia.org/wiki/Huffman_coding">double-queue algorithm</a>. Two sorted queues (leaves and merged nodes) are maintained; each step dequeues the two lowest-frequency items, merges them into a new parent node, and enqueues it back. The process repeats until a single root remains.',
+  'Encodes a string using the Huffman tree. For each character, the tree is traversed from root to the corresponding leaf; each left edge produces a 0 bit and each right edge produces a 1 bit. The resulting bits form the codeword for that character.',
+  'Decodes a Huffman-encoded bitstring back into the original string. Starting at the root, each bit directs traversal one level down the tree (0 = left, 1 = right). When a leaf is reached, the corresponding symbol is emitted and traversal resets to the root.',
+  'Derives a <a href="https://en.wikipedia.org/wiki/Canonical_Huffman_code">canonical Huffman code</a> from the tree. Only the code lengths matter \u2014 codewords are reassigned so that shorter codes precede longer ones numerically and symbols of equal length appear in alphabetical order. The result is a portable code that can be reconstructed from the length table alone.',
+  'Enforces a maximum code length on the Huffman code to limit the size of the decoding table (shown in the last two visualizations), which grows exponentially with the maximum depth. Codes exceeding the depth limit are clamped, then a demote/promote pass redistributes code lengths to satisfy the <a href="https://en.wikipedia.org/wiki/Kraft%E2%80%93McMillan_inequality">Kraft inequality</a> while keeping total encoding cost low. The algorithm used is a simple heuristic that works well in practice but does not guarantee an optimal result. The <a href="https://en.wikipedia.org/wiki/Package-merge_algorithm">Package Merge algorithm</a> produces an optimal length-limited code, but in practice the difference is negligable and the heuristic is faster.',
+  'Encodes a string by looking up each character in the canonical symbol table produced by depth limiting. Instead of traversing a tree, each character maps directly to its codeword via a table lookup. This is how real-world implementations typically perform encoding, since it\'s much faster than tree traversal.',
+  'Constructs a single-level decoding lookup table with 2^D entries (where D is the max depth). Each symbol\'s codeword is padded to D bits, and all table slots that share that prefix are filled with the symbol and its actual bit length.',
+  'Decodes a bitstring using the lookup table. For each codeword, D bits are read from the stream and used as an index into the table. The entry gives the decoded symbol and how many bits to actually consume, then the stream advances.',
+];
+
+
 interface IDemo {
   start(inputs: SymbolInput[], inputString: string): void;
   pause?(): void;
@@ -125,6 +137,16 @@ export class DemoPlayer {
     const slide8 = this.addSlide();
     this.tableDecodingDemo = new TableDecodingDemo(slide8);
     this.demos.push(this.tableDecodingDemo);
+
+    // Insert description paragraphs into each slide
+    const slides = [slide1, slide2, slide3, slide4, slide5, slide6, slide7, slide8];
+    for (let i = 0; i < slides.length; i++) {
+      const desc = document.createElement('p');
+      desc.className = 'demo-description';
+      desc.innerHTML = DEMO_DESCRIPTIONS[i];
+      const vizArea = slides[i].querySelector('.viz-area');
+      slides[i].insertBefore(desc, vizArea);
+    }
 
     this.updateNavUI();
     void this.loadWordList();
